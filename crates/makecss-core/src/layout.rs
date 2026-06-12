@@ -85,6 +85,7 @@ pub fn layout_tree(
 /// - available_width: 이 요소가 써도 되는 가로 공간(마진/테두리/패딩 포함).
 /// - cb: 위치 지정된 가장 가까운 조상의 내용 영역(absolute 기준).
 /// - viewport: 화면 전체 영역(fixed 기준).
+#[allow(clippy::too_many_arguments)]
 fn layout_node(
     node: &Node,
     sheet: &Stylesheet,
@@ -118,14 +119,14 @@ fn layout_node(
         Some(w) => w,
         None => {
             if out_of_flow {
-                if style.left.is_some() && style.right.is_some() {
+                match (style.left, style.right) {
                     // 좌우가 둘 다 고정되면 그 사이를 채웁니다.
-                    (base.width - style.left.unwrap() - style.right.unwrap() - 2.0 * (bd + pd))
-                        .max(0.0)
-                } else {
+                    (Some(l), Some(r)) => (base.width - l - r - 2.0 * (bd + pd)).max(0.0),
                     // 그 외 흐름 밖 요소는 '내용 크기에 맞춰 줄어듭니다'(shrink-to-fit).
-                    let stf = (intrinsic_width(node, sheet, font) - 2.0 * edge).max(0.0);
-                    stf.min((base.width - 2.0 * edge).max(0.0))
+                    _ => {
+                        let stf = (intrinsic_width(node, sheet, font) - 2.0 * edge).max(0.0);
+                        stf.min((base.width - 2.0 * edge).max(0.0))
+                    }
                 }
             } else {
                 (width_basis - 2.0 * edge).max(0.0)
@@ -230,6 +231,7 @@ fn layout_node(
 }
 
 /// block 배치: 흐름 안 자식들을 위에서 아래로 쌓습니다.
+#[allow(clippy::too_many_arguments)]
 fn layout_block(
     cx: f32,
     cy: f32,
@@ -254,6 +256,7 @@ fn layout_block(
 /// flex 배치: 흐름 안 자식들을 한 줄(가로/세로)로 세웁니다.
 /// 절차: ① 자연 크기로 우선 배치 → ② 남는 공간을 flex-grow로 분배 →
 ///       ③ 교차축 정렬/늘리기 → ④ 주축 정렬(justify) → ⑤ 최종 위치로 이동.
+#[allow(clippy::too_many_arguments)]
 fn layout_flex(
     style: &ComputedStyle,
     cx: f32,

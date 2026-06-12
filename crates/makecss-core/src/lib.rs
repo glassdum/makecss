@@ -112,7 +112,7 @@ mod tests {
         let root = Node::new("div").class("t").text("I");
         let css = ".t { color: black; font-size: 14px; }";
         let canvas = render(&root, css, 60, 30);
-        let has_black = canvas.pixels.iter().any(|&p| p == 0x000000);
+        let has_black = canvas.pixels.contains(&0x000000);
         assert!(has_black, "글자 픽셀이 하나도 그려지지 않았습니다");
     }
 }

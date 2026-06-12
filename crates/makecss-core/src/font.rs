@@ -41,6 +41,10 @@ impl FontFace for BitmapFont {
         let scale = scale_for(font_size);
         let w = GLYPH_W * scale;
         let h = GLYPH_H * scale;
+        // 비정상적으로 큰 글자 크기는 메모리 폭발(OOM)을 막기 위해 그리지 않습니다.
+        if w > crate::fontface::MAX_GLYPH_DIM || h > crate::fontface::MAX_GLYPH_DIM {
+            return GlyphBitmap::empty();
+        }
         let mut coverage = vec![0u8; w * h];
 
         let art = glyph_art(ch);
@@ -189,7 +193,7 @@ mod tests {
     fn rasterizes_filled_pixels() {
         // 'I'는 가운데 세로줄이 있으니 진하기 255 픽셀이 존재해야 함.
         let gb = BitmapFont.rasterize('I', 14.0);
-        assert!(gb.coverage.iter().any(|&c| c == 255));
+        assert!(gb.coverage.contains(&255));
         assert_eq!(gb.width, GLYPH_W * scale_for(14.0));
     }
 }

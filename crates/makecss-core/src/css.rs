@@ -62,10 +62,17 @@ pub fn parse(input: &str) -> Stylesheet {
         if parser.eof() {
             break;
         }
+        let before = parser.pos;
         if let Some(rule) = parser.parse_rule() {
             rules.push(rule);
         } else {
-            break;
+            // 알 수 없거나 깨진 구문(예: @media, 떠도는 '}')은 통째로 버리지 않고
+            // 그 블록만 건너뛰고 계속합니다(브라우저처럼). 다음 '}' 뒤로 이동.
+            parser.recover_to_next_block();
+        }
+        // 진행이 없으면 한 글자 강제로 넘겨 무한 루프를 막습니다.
+        if parser.pos == before {
+            parser.pos += 1;
         }
     }
     Stylesheet { rules }
@@ -122,6 +129,40 @@ impl Parser {
             }
         }
         result
+    }
+
+    /// 깨졌거나 지원하지 않는 구문에서 회복합니다.
+    /// - '@'로 시작하는 at-규칙(@media 등)은 블록(또는 ';')까지 통째로 건너뜁니다.
+    /// - 그 밖의 예기치 못한 글자는 '하나만' 건너뛰어, 뒤따르는 정상 규칙을 지킵니다.
+    fn recover_to_next_block(&mut self) {
+        if self.peek() == Some('@') {
+            while let Some(c) = self.peek() {
+                self.pos += 1;
+                if c == ';' {
+                    return; // @import 처럼 블록 없이 끝나는 규칙.
+                }
+                if c == '{' {
+                    // 중괄호 깊이를 맞춰 닫는 '}'까지 건너뜁니다(중첩 대비).
+                    let mut depth = 1;
+                    while let Some(d) = self.peek() {
+                        self.pos += 1;
+                        match d {
+                            '{' => depth += 1,
+                            '}' => {
+                                depth -= 1;
+                                if depth == 0 {
+                                    return;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    return;
+                }
+            }
+            return;
+        }
+        self.pos += 1;
     }
 
     /// 규칙 하나(`셀렉터들 { 선언들 }`)를 파싱합니다.
@@ -263,6 +304,15 @@ mod tests {
         assert_eq!(rule.declarations[0].value, "blue");
         assert_eq!(rule.declarations[1].property, "padding");
         assert_eq!(rule.declarations[1].value, "10px");
+    }
+
+    #[test]
+    fn recovers_after_at_rules_and_stray_tokens() {
+        // @media 블록과 떠도는 '}' 뒤에 오는 정상 규칙도 끝까지 파싱되어야 합니다.
+        let sheet = parse("@media screen { .x { color: red; } } } .a { color: blue; }");
+        let last = sheet.rules.last().expect("정상 규칙이 살아있어야 함");
+        assert_eq!(last.selectors, vec![Selector::Class("a".into())]);
+        assert_eq!(last.declarations[0].value, "blue");
     }
 
     #[test]

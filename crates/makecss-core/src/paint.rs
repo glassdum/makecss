@@ -146,7 +146,7 @@ mod tests {
             Color::rgb(255, 0, 0),
         );
         // (1,1) 은 빨강, (0,0) 은 그대로 흰색이어야 합니다.
-        assert_eq!(canvas.pixels[1 * 4 + 1], pack(Color::rgb(255, 0, 0)));
+        assert_eq!(canvas.pixels[4 + 1], pack(Color::rgb(255, 0, 0)));
         assert_eq!(canvas.pixels[0], pack(Color::WHITE));
     }
 

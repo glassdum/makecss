@@ -30,6 +30,10 @@ impl GlyphBitmap {
     }
 }
 
+/// 글자 한 칸 도장의 최대 변 길이(px). 비정상적으로 큰 font-size로 인한
+/// 메모리 폭발(OOM)을 막기 위해, 이보다 큰 글자는 그리지 않습니다.
+pub const MAX_GLYPH_DIM: usize = 4096;
+
 /// 모든 폰트가 지켜야 할 약속.
 /// 레이아웃·페인트는 `&dyn FontFace`로 어떤 폰트든 똑같이 사용합니다.
 pub trait FontFace {

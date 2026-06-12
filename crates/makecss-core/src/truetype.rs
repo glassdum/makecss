@@ -7,7 +7,7 @@
 //!   1) 파싱   : 폰트 파일의 표(table)들을 읽어 글자별 외곽선 좌표를 얻는다.
 //!   2) 평탄화 : 곡선(2차 베지에)을 잘게 쪼개 직선들의 다각형으로 편다.
 //!   3) 채우기 : 다각형 '안쪽'에 드는 픽셀을 칠한다. 가장자리는 여러 점을 찍어
-//!               평균(=커버리지)으로 부드럽게 = 안티앨리어싱(supersampling).
+//!      평균(=커버리지)으로 부드럽게 = 안티앨리어싱(supersampling).
 //!
 //! 지원: glyf(TrueType 외곽선) + cmap 포맷 4(기본 다국어 평면). CFF(.otf 계열)는
 //! 외곽선 저장 방식이 달라 지원하지 않습니다.
@@ -529,6 +529,10 @@ impl FontFace for TtfFont {
         let width = (max_x.ceil() - min_x).max(0.0) as usize;
         let height = (max_y.ceil() - min_y).max(0.0) as usize;
         if width == 0 || height == 0 {
+            return GlyphBitmap::empty();
+        }
+        // 비정상적으로 큰 글자 크기는 메모리 폭발(OOM)을 막기 위해 그리지 않습니다.
+        if width > crate::fontface::MAX_GLYPH_DIM || height > crate::fontface::MAX_GLYPH_DIM {
             return GlyphBitmap::empty();
         }
 
