@@ -37,8 +37,10 @@ pub struct ComputedStyle {
     pub border_color: Color,
     /// 배경색. 기본은 투명(아무것도 안 칠함).
     pub background: Color,
-    /// 글자색. 아직 글자를 그리진 않지만 다음 단계를 위해 보관합니다.
+    /// 글자색.
     pub color: Color,
+    /// 글자 크기(px). 비트맵 폰트를 이 크기에 맞춰 확대해 그립니다.
+    pub font_size: f32,
 }
 
 impl Default for ComputedStyle {
@@ -52,6 +54,7 @@ impl Default for ComputedStyle {
             border_color: Color::BLACK,
             background: Color::TRANSPARENT,
             color: Color::BLACK,
+            font_size: 16.0,
         }
     }
 }
@@ -147,6 +150,11 @@ fn apply_declaration(style: &mut ComputedStyle, decl: &Declaration) {
         "color" => {
             if let Some(c) = Color::parse(value) {
                 style.color = c;
+            }
+        }
+        "font-size" => {
+            if let Some(px) = parse_length(value) {
+                style.font_size = px;
             }
         }
         _ => {} // 모르는 속성은 무시.

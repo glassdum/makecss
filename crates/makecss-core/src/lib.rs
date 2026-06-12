@@ -18,6 +18,7 @@
 pub mod color;
 pub mod css;
 pub mod dom;
+pub mod font;
 pub mod layout;
 pub mod paint;
 pub mod style;
@@ -64,5 +65,15 @@ mod tests {
         let outside = canvas.pixels[80 * 100 + 80];
         assert_eq!(inside, 0xff0000); // 빨강
         assert_eq!(outside, 0xffffff); // 흰색
+    }
+
+    #[test]
+    fn draws_text_pixels() {
+        // 흰 배경에 검은 글자 "I"를 그리면, 글자 픽셀(검정)이 적어도 하나는 생겨야 합니다.
+        let root = Node::new("div").class("t").text("I");
+        let css = ".t { color: black; font-size: 14px; }";
+        let canvas = render(&root, css, 60, 30);
+        let has_black = canvas.pixels.iter().any(|&p| p == 0x000000);
+        assert!(has_black, "글자 픽셀이 하나도 그려지지 않았습니다");
     }
 }

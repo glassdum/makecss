@@ -32,17 +32,31 @@ use winit::window::{Window, WindowId};
 ///    │   └─ accent (반투명 파랑 띠)
 ///    └─ card (흰 카드)
 fn scene() -> (Node, String) {
-    let root = Node::new("div").class("page").child(
-        Node::new("div")
-            .class("card")
-            .child(Node::new("div").class("accent")),
-    ).child(Node::new("div").class("card"));
+    let root = Node::new("div")
+        .class("page")
+        .child(
+            Node::new("div")
+                .class("card")
+                .child(Node::new("div").class("title").text("MAKECSS"))
+                .child(
+                    Node::new("div")
+                        .class("accent")
+                        .text("CSS TO PIXELS"),
+                ),
+        )
+        .child(
+            Node::new("div")
+                .class("card")
+                .text("HELLO, BOX MODEL!"),
+        );
 
     let css = r#"
         .page   { background: #f0f0f0; padding: 16px; }
         .card   { background: white; border-width: 1px; border-color: #cccccc;
-                  padding: 12px; margin: 8px; height: 64px; }
-        .accent { background: rgba(0, 120, 255, 0.5); height: 32px; margin: 4px; }
+                  padding: 12px; margin: 8px; color: #333333; }
+        .title  { font-size: 28px; color: #111111; }
+        .accent { background: rgba(0, 120, 255, 0.5); color: white;
+                  font-size: 16px; padding: 6px; margin: 8px; }
     "#;
 
     (root, css.to_string())

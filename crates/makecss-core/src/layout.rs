@@ -24,6 +24,7 @@
 
 use crate::css::Stylesheet;
 use crate::dom::Node;
+use crate::font;
 use crate::style::{compute_style, ComputedStyle};
 
 /// 화면 위 사각형 영역. 왼쪽 위 모서리 (x, y)와 너비/높이.
@@ -43,6 +44,8 @@ pub struct LayoutBox {
     pub style: ComputedStyle,
     /// 테두리 바깥선 기준 사각형(= border-box). 배경/테두리를 칠할 영역.
     pub border_box: Rect,
+    /// 이 박스가 직접 그릴 글자 내용(있으면). 페인트 단계에서 사용합니다.
+    pub text: Option<String>,
     /// 레이아웃이 끝난 자식 박스들.
     pub children: Vec<LayoutBox>,
 }
@@ -99,8 +102,15 @@ fn layout_node(
     let children_height = cursor_y - content_y;
 
     // ── 3) 높이 결정 ──
-    // height가 지정됐으면 그 값을, 아니면 자식들이 쌓인 높이를 내용 높이로 씁니다.
-    let content_height = style.height.unwrap_or(children_height);
+    // height가 지정됐으면 그 값을, 아니면 '내용이 스스로 차지하는 높이'를 씁니다.
+    // - 자식이 있으면: 자식들이 쌓인 높이.
+    // - 자식 없이 글자만 있으면: 글자 한 줄 높이.
+    let intrinsic_height = if node.children.is_empty() && node.text.is_some() {
+        font::line_height(style.font_size)
+    } else {
+        children_height
+    };
+    let content_height = style.height.unwrap_or(intrinsic_height);
     let border_box_height = content_height + 2.0 * (style.border_width + style.padding);
 
     LayoutBox {
@@ -111,6 +121,7 @@ fn layout_node(
             width: border_box_width,
             height: border_box_height,
         },
+        text: node.text.clone(),
         children,
     }
 }

@@ -1,5 +1,9 @@
 # Rust 빌드 산출물. 용량이 크고 언제든 다시 빌드되므로 저장소에 넣지 않습니다.
 /target
 
+# 예제가 생성하는 스냅샷 이미지(언제든 다시 만들 수 있음).
+/snapshot.bmp
+/snapshot.png
+
 # OS/에디터 부산물
 .DS_Store

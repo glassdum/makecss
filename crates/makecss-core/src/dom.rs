@@ -16,6 +16,9 @@ pub struct Node {
     pub classes: Vec<String>,
     /// 이 요소 안에 들어있는 자식 요소들.
     pub children: Vec<Node>,
+    /// 이 요소가 직접 담은 글자 내용. 예: <div>안녕</div> 의 "안녕".
+    /// 없으면 None. MVP에서는 한 요소가 '텍스트 또는 자식들' 중 하나를 가집니다.
+    pub text: Option<String>,
 }
 
 impl Node {
@@ -25,6 +28,7 @@ impl Node {
             tag: tag.to_string(),
             classes: Vec::new(),
             children: Vec::new(),
+            text: None,
         }
     }
 
@@ -38,6 +42,12 @@ impl Node {
     /// 자식 요소 하나를 추가합니다. 역시 이어 붙이기 가능.
     pub fn child(mut self, node: Node) -> Self {
         self.children.push(node);
+        self
+    }
+
+    /// 글자 내용을 담습니다. 예: Node::new("div").text("Hello")
+    pub fn text(mut self, content: &str) -> Self {
+        self.text = Some(content.to_string());
         self
     }
 }

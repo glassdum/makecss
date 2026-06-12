@@ -25,6 +25,8 @@ CSS 텍스트         1.파서       2.스타일      3.레이아웃     4.페�
 | 3. 레이아웃 | `layout.rs` | 스타일 → 위치/크기 | 박스 모델, 블록 흐름 |
 | 4. 페인트 | `paint.rs`  | 박스 → 픽셀 | 래스터화, 알파 합성 |
 
+글자는 `font.rs`의 손수 그린 5x7 비트맵 폰트로 그립니다(글자 = 점 패턴).
+
 코어(주방)는 창 띄우기·마우스 같은 바깥세상을 전혀 모릅니다. 그건 `makecss-demo`
 (서빙 직원)가 담당합니다. 나중에 Python/Java/C# 바인딩도 이 "서빙" 자리에 들어옵니다.
 
@@ -41,7 +43,10 @@ makecss/
 │  │     ├─ style.rs     # 2) 스타일 매칭/캐스케이드
 │  │     ├─ layout.rs    # 3) 박스 모델 레이아웃
 │  │     ├─ paint.rs     # 4) 직접 픽셀 렌더링(Canvas)
-│  │     └─ lib.rs       # 정문: render() 한 방으로 위 4단계 실행
+│  │     ├─ font.rs      # 5x7 비트맵 폰트 + 텍스트 그리기
+│  │     └─ lib.rs       # 정문: render() 한 방으로 위 단계 실행
+│  │  └─ examples/
+│  │     └─ snapshot.rs  # 장면을 BMP 이미지로 저장(화면 없이 결과 확인)
 │  └─ makecss-demo/      # winit으로 창 띄우고 픽셀을 보여주는 쇼룸
 └─ Cargo.toml            # 워크스페이스
 ```
@@ -54,6 +59,9 @@ cargo test -p makecss-core
 
 # 창 띄워 실제로 보기 (디스플레이 있는 로컬 PC에서)
 cargo run -p makecss-demo
+
+# 화면 없이 결과를 이미지로 저장 (snapshot.bmp 생성)
+cargo run -p makecss-core --example snapshot
 ```
 
 데모는 회색 페이지 위에 흰 카드 두 장, 그 안에 반투명 파란 띠를 그립니다 —
@@ -63,15 +71,18 @@ cargo run -p makecss-demo
 
 - **셀렉터**: `*`, 태그(`div`), 클래스(`.card`)
 - **속성**: `width`, `height`, `padding`, `margin`, `border-width`, `border-color`,
-  `background`/`background-color`, `color`
+  `background`/`background-color`, `color`, `font-size`
 - **값**: `px` 길이, `#rgb`/`#rrggbb`/`rgb()`/`rgba()`/색 이름
 - **배치**: 블록 흐름(자식을 위→아래로 쌓기)
+- **텍스트**: 5x7 비트맵 폰트로 한 줄 그리기(대문자/숫자/기본 문장부호; 소문자는
+  대문자로 대체). 줄바꿈·자동 줄나눔·실제 TTF 폰트는 아직 없음.
 
 ## 로드맵 (다음 단계)
 
-1. **텍스트 렌더링** — 폰트 글리프를 픽셀로. (가장 임팩트 큰 다음 기능)
-2. **HTML/마크업 파서** — 트리를 코드가 아닌 텍스트로 작성
-3. **레이아웃 강화** — Flexbox, 퍼센트/`em` 단위, 변마다 다른 padding/margin
-4. **인터랙션** — 마우스/키보드 이벤트, `:hover`/`:focus`, 버튼·입력창
-5. **멀티언어 바인딩** — C ABI 노출 → Python(ctypes)/Java(JNI)/C#(P/Invoke)
-6. **실사용 다듬기** — 애니메이션/트랜지션, 고DPI, 패키징(exe/앱 번들)
+1. ✅ **텍스트 렌더링(1차)** — 5x7 비트맵 폰트로 한 줄 그리기. *(완료)*
+2. **텍스트 강화** — 소문자 전용 글자, 줄바꿈/자동 줄나눔, 정렬, 실제 TTF 폰트
+3. **HTML/마크업 파서** — 트리를 코드가 아닌 텍스트로 작성
+4. **레이아웃 강화** — Flexbox, 퍼센트/`em` 단위, 변마다 다른 padding/margin
+5. **인터랙션** — 마우스/키보드 이벤트, `:hover`/`:focus`, 버튼·입력창
+6. **멀티언어 바인딩** — C ABI 노출 → Python(ctypes)/Java(JNI)/C#(P/Invoke)
+7. **실사용 다듬기** — 애니메이션/트랜지션, 고DPI, 패키징(exe/앱 번들)
