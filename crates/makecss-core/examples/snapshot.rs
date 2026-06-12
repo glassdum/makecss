@@ -18,39 +18,59 @@ use std::io::{BufWriter, Write};
 use makecss_core::truetype::TtfFont;
 use makecss_core::{render_html, render_html_with_font, Canvas};
 
-const WIDTH: u32 = 460;
-const HEIGHT: u32 = 440;
+const WIDTH: u32 = 540;
+const HEIGHT: u32 = 360;
 
-/// 보여줄 화면을 'HTML 문자열'로 작성합니다 — 더 이상 Rust 코드로 트리를 조립하지 않습니다!
+/// 보여줄 화면을 'HTML 문자열'로 작성합니다.
+/// flex(네비게이션·카드 줄), absolute(배지), 중첩 flex를 한 화면에서 보여줍니다.
 fn html() -> &'static str {
     r#"
     <div class="page">
-        <div class="title">makecss</div>
-        <div class="card">
-            <div class="para">
-                The quick brown fox jumps over the lazy dog.
-                This long sentence wraps automatically to fit inside the card width.
+        <div class="nav">
+            <div class="brand">makecss</div>
+            <div class="links">
+                <div class="link">home</div>
+                <div class="link">docs</div>
+                <div class="link">about</div>
             </div>
         </div>
-        <div class="bar">left aligned text</div>
-        <div class="bar c">center aligned text</div>
-        <div class="bar r">right aligned text</div>
+        <div class="cards">
+            <div class="card">
+                <div class="badge">new</div>
+                <div class="h">flex grow</div>
+                <div class="p">three cards share the row width equally.</div>
+            </div>
+            <div class="card">
+                <div class="h">align</div>
+                <div class="p">stretch makes every card the same height even with more text inside.</div>
+            </div>
+            <div class="card">
+                <div class="h">absolute</div>
+                <div class="p">the pink badge floats at the top-right corner.</div>
+            </div>
+        </div>
     </div>
     "#
 }
 
-/// 화면을 꾸미는 CSS.
+/// 화면을 꾸미는 CSS. display / position / flex 속성들을 사용합니다.
 fn css() -> &'static str {
     r#"
-        .page  { background: #eef2f7; padding: 20px; }
-        .title { font-size: 32px; color: #1a1a2e; padding: 4px; }
-        .card  { background: white; border-width: 1px; border-color: #ccccdd;
-                 padding: 12px; margin: 10px; }
-        .para  { font-size: 16px; color: #333344; }
-        .bar   { background: #dde6f0; color: #223355; font-size: 16px;
-                 padding: 6px; margin: 6px; }
-        .c     { text-align: center; }
-        .r     { text-align: right; }
+        .page   { background: #eef2f7; padding: 16px; }
+
+        .nav    { display: flex; justify-content: space-between; align-items: center;
+                  background: #1a1a2e; padding: 12px; }
+        .brand  { color: white; font-size: 24px; }
+        .links  { display: flex; gap: 16px; }
+        .link   { color: #aab4d4; font-size: 16px; }
+
+        .cards  { display: flex; align-items: stretch; gap: 12px; margin: 14px; }
+        .card   { flex: 1; position: relative; background: white;
+                  border-width: 1px; border-color: #ccccdd; padding: 12px; }
+        .h      { font-size: 20px; color: #1a1a2e; }
+        .p      { font-size: 14px; color: #445566; }
+        .badge  { position: absolute; top: 8px; right: 8px;
+                  background: #e0457b; color: white; font-size: 12px; padding: 4px; }
     "#
 }
 

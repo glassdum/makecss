@@ -30,29 +30,41 @@ use winit::window::{Window, WindowId};
 fn scene() -> (&'static str, &'static str) {
     let html = r#"
         <div class="page">
-            <div class="title">makecss demo</div>
-            <div class="card">
-                <div class="para">
-                    The quick brown fox jumps over the lazy dog.
-                    This sentence wraps automatically to fit the card.
+            <div class="nav">
+                <div class="brand">makecss</div>
+                <div class="links">
+                    <div class="link">home</div>
+                    <div class="link">docs</div>
                 </div>
             </div>
-            <div class="bar">left aligned</div>
-            <div class="bar c">center aligned</div>
-            <div class="bar r">right aligned</div>
+            <div class="cards">
+                <div class="card">
+                    <div class="badge">new</div>
+                    <div class="h">flex</div>
+                    <div class="p">cards share the row equally.</div>
+                </div>
+                <div class="card">
+                    <div class="h">stretch</div>
+                    <div class="p">same height even with more text inside here.</div>
+                </div>
+            </div>
         </div>
     "#;
 
     let css = r#"
-        .page  { background: #eef2f7; padding: 16px; }
-        .title { font-size: 28px; color: #1a1a2e; padding: 4px; }
-        .card  { background: white; border-width: 1px; border-color: #cccccc;
-                 padding: 12px; margin: 8px; color: #333344; }
-        .para  { font-size: 16px; }
-        .bar   { background: #dde6f0; color: #223355; font-size: 16px;
-                 padding: 6px; margin: 6px; }
-        .c     { text-align: center; }
-        .r     { text-align: right; }
+        .page   { background: #eef2f7; padding: 16px; }
+        .nav    { display: flex; justify-content: space-between; align-items: center;
+                  background: #1a1a2e; padding: 12px; }
+        .brand  { color: white; font-size: 24px; }
+        .links  { display: flex; gap: 16px; }
+        .link   { color: #aab4d4; font-size: 16px; }
+        .cards  { display: flex; align-items: stretch; gap: 12px; margin: 14px; }
+        .card   { flex: 1; position: relative; background: white;
+                  border-width: 1px; border-color: #ccccdd; padding: 12px; }
+        .h      { font-size: 20px; color: #1a1a2e; }
+        .p      { font-size: 14px; color: #445566; }
+        .badge  { position: absolute; top: 8px; right: 8px;
+                  background: #e0457b; color: white; font-size: 12px; padding: 4px; }
     "#;
 
     (html, css)

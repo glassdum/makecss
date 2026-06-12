@@ -27,6 +27,57 @@ pub enum TextAlign {
     Right,
 }
 
+/// 배치 모드. display 속성의 값.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Display {
+    /// 자식을 위에서 아래로 쌓음(기본).
+    Block,
+    /// 자식을 한 줄(가로/세로)로 세우는 flex 컨테이너.
+    Flex,
+    /// 이 요소와 그 자식을 아예 그리지 않음.
+    None,
+}
+
+/// 위치 지정 방식. position 속성의 값.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Position {
+    /// 정상 흐름(기본).
+    Static,
+    /// 정상 흐름 자리는 유지하되 top/left 등으로 시각적으로만 이동.
+    Relative,
+    /// 흐름에서 빠져나와 '위치 지정된 조상' 기준으로 띄움.
+    Absolute,
+    /// 흐름에서 빠져나와 '화면(viewport)' 기준으로 띄움.
+    Fixed,
+}
+
+/// flex 주축 방향.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FlexDirection {
+    Row,
+    Column,
+}
+
+/// 주축(main axis) 정렬. justify-content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Justify {
+    Start,
+    Center,
+    End,
+    SpaceBetween,
+    SpaceAround,
+}
+
+/// 교차축(cross axis) 정렬. align-items.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AlignItems {
+    Start,
+    Center,
+    End,
+    /// 교차축을 가득 채우도록 늘림(기본).
+    Stretch,
+}
+
 /// 한 요소에 대해 모든 충돌을 해결한 '최종' 스타일.
 /// 레이아웃과 페인트는 오직 이 구조만 보고 일합니다.
 #[derive(Debug, Clone)]
@@ -51,6 +102,31 @@ pub struct ComputedStyle {
     pub font_size: f32,
     /// 글자 가로 정렬(왼쪽/가운데/오른쪽).
     pub text_align: TextAlign,
+
+    // ── 배치/위치 ──
+    /// 배치 모드(block/flex/none).
+    pub display: Display,
+    /// 위치 지정 방식(static/relative/absolute/fixed).
+    pub position: Position,
+    /// 위치 지정 시 각 변에서의 거리(px). None이면 지정 안 함.
+    pub top: Option<f32>,
+    pub right: Option<f32>,
+    pub bottom: Option<f32>,
+    pub left: Option<f32>,
+
+    // ── flex 컨테이너 속성 ──
+    /// 주축 방향(가로/세로).
+    pub flex_direction: FlexDirection,
+    /// 주축 정렬.
+    pub justify_content: Justify,
+    /// 교차축 정렬.
+    pub align_items: AlignItems,
+    /// 자식 사이 간격(px).
+    pub gap: f32,
+
+    // ── flex 자식 속성 ──
+    /// 남는 주축 공간을 나눠 갖는 비율(0이면 안 늘어남).
+    pub flex_grow: f32,
 }
 
 impl Default for ComputedStyle {
@@ -66,6 +142,17 @@ impl Default for ComputedStyle {
             color: Color::BLACK,
             font_size: 16.0,
             text_align: TextAlign::Left,
+            display: Display::Block,
+            position: Position::Static,
+            top: None,
+            right: None,
+            bottom: None,
+            left: None,
+            flex_direction: FlexDirection::Row,
+            justify_content: Justify::Start,
+            align_items: AlignItems::Stretch,
+            gap: 0.0,
+            flex_grow: 0.0,
         }
     }
 }
@@ -174,6 +261,66 @@ fn apply_declaration(style: &mut ComputedStyle, decl: &Declaration) {
                 "right" => TextAlign::Right,
                 _ => TextAlign::Left,
             };
+        }
+        "display" => {
+            style.display = match value {
+                "flex" => Display::Flex,
+                "none" => Display::None,
+                _ => Display::Block,
+            };
+        }
+        "position" => {
+            style.position = match value {
+                "relative" => Position::Relative,
+                "absolute" => Position::Absolute,
+                "fixed" => Position::Fixed,
+                _ => Position::Static,
+            };
+        }
+        "top" => style.top = parse_length(value),
+        "right" => style.right = parse_length(value),
+        "bottom" => style.bottom = parse_length(value),
+        "left" => style.left = parse_length(value),
+        "flex-direction" => {
+            style.flex_direction = match value {
+                "column" => FlexDirection::Column,
+                _ => FlexDirection::Row,
+            };
+        }
+        "justify-content" => {
+            style.justify_content = match value {
+                "center" => Justify::Center,
+                "flex-end" | "end" => Justify::End,
+                "space-between" => Justify::SpaceBetween,
+                "space-around" => Justify::SpaceAround,
+                _ => Justify::Start,
+            };
+        }
+        "align-items" => {
+            style.align_items = match value {
+                "center" => AlignItems::Center,
+                "flex-end" | "end" => AlignItems::End,
+                "flex-start" | "start" => AlignItems::Start,
+                _ => AlignItems::Stretch,
+            };
+        }
+        "gap" => {
+            if let Some(px) = parse_length(value) {
+                style.gap = px;
+            }
+        }
+        "flex-grow" => {
+            if let Ok(g) = value.parse::<f32>() {
+                style.flex_grow = g;
+            }
+        }
+        "flex" => {
+            // 단축 속성: 첫 토큰을 flex-grow로 해석(예: "flex: 1").
+            if let Some(first) = value.split_whitespace().next() {
+                if let Ok(g) = first.parse::<f32>() {
+                    style.flex_grow = g;
+                }
+            }
         }
         _ => {} // 모르는 속성은 무시.
     }

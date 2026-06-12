@@ -58,8 +58,8 @@ pub fn render_with_font(
     // 1. 파싱: CSS 텍스트 → 규칙 구조.
     let stylesheet = css::parse(css);
 
-    // 2 + 3. 스타일 계산과 레이아웃(글자 줄나눔 포함)을 화면 폭에 맞춰 수행.
-    let layout_root = layout::layout_tree(root, &stylesheet, width as f32, font);
+    // 2 + 3. 스타일 계산과 레이아웃(글자 줄나눔 포함)을 화면 크기에 맞춰 수행.
+    let layout_root = layout::layout_tree(root, &stylesheet, width as f32, height as f32, font);
 
     // 4. 페인트: 흰 캔버스를 만들고 박스들을 그 위에 그립니다.
     let mut canvas = Canvas::new(width, height, Color::WHITE);

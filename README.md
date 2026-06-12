@@ -95,8 +95,11 @@ let canvas = render_html(html, css, 320, 80); // canvas.pixels = Vec<u32> (0x00R
 - **셀렉터**: `*`, 태그(`div`), 클래스(`.card`)
 - **속성**: `width`, `height`, `padding`, `margin`, `border-width`, `border-color`,
   `background`/`background-color`, `color`, `font-size`, `text-align`
+- **배치**: `display`(block/flex/none), `position`(static/relative/absolute/fixed),
+  `top`/`right`/`bottom`/`left`
+- **Flex**: `flex-direction`(row/column), `justify-content`, `align-items`, `gap`,
+  `flex-grow`(+`flex` 단축)
 - **값**: `px` 길이, `#rgb`/`#rrggbb`/`rgb()`/`rgba()`/색 이름
-- **배치**: 블록 흐름(자식을 위→아래로 쌓기)
 - **텍스트**: 대문자·소문자·숫자·문장부호, **자동 줄나눔**, **정렬**(left/center/right),
   비트맵 폰트 또는 **진짜 TTF 폰트**(안티앨리어싱). 세로 정렬·여러 글꼴 혼용은 아직 없음.
 - **HTML**: `<div class="card">...</div>` 마크업 → Node 트리. 중첩, `class` 속성,
@@ -106,7 +109,8 @@ let canvas = render_html(html, css, 320, 80); // canvas.pixels = Vec<u32> (0x00R
 
 1. ✅ **텍스트 렌더링** — 비트맵 폰트, 소문자, 자동 줄나눔, 정렬, **TTF 폰트**. *(완료)*
 2. ✅ **HTML 파서** — `<div class="card">...</div>` 마크업으로 화면 작성. *(완료)*
-3. **레이아웃 강화** — Flexbox, 퍼센트/`em` 단위, 변마다 다른 padding/margin, 스타일 상속
-4. **인터랙션** — 마우스/키보드 이벤트, `:hover`/`:focus`, 버튼·입력창
-5. **멀티언어 바인딩** — C ABI 노출 → Python(ctypes)/Java(JNI)/C#(P/Invoke)
-6. **실사용 다듬기** — 줄바꿈(`\n`)·세로 정렬·글꼴 캐싱, 애니메이션, 고DPI, 패키징
+3. ✅ **레이아웃 강화** — **Flexbox**, **display**, **position**(relative/absolute/fixed). *(완료)*
+4. **레이아웃 더** — 퍼센트/`em` 단위, 변마다 다른 padding/margin, 스타일 상속, flex-shrink/wrap
+5. **인터랙션** — 마우스/키보드 이벤트, `:hover`/`:focus`, 버튼·입력창
+6. **멀티언어 바인딩** — C ABI 노출 → Python(ctypes)/Java(JNI)/C#(P/Invoke)
+7. **실사용 다듬기** — 줄바꿈(`\n`)·세로 정렬·글꼴 캐싱, 애니메이션, 고DPI, 패키징
