@@ -24,8 +24,9 @@
 
 use crate::css::Stylesheet;
 use crate::dom::Node;
-use crate::font;
+use crate::fontface::FontFace;
 use crate::style::{compute_style, ComputedStyle};
+use crate::text::{self, TextBlock};
 
 /// 화면 위 사각형 영역. 왼쪽 위 모서리 (x, y)와 너비/높이.
 /// 단위는 픽셀. 좌표계는 화면 기준: 오른쪽으로 +x, 아래로 +y.
@@ -44,17 +45,23 @@ pub struct LayoutBox {
     pub style: ComputedStyle,
     /// 테두리 바깥선 기준 사각형(= border-box). 배경/테두리를 칠할 영역.
     pub border_box: Rect,
-    /// 이 박스가 직접 그릴 글자 내용(있으면). 페인트 단계에서 사용합니다.
-    pub text: Option<String>,
+    /// 줄나눔·정렬까지 끝난 글자 내용(있으면). 페인트가 그대로 찍습니다.
+    pub text: Option<TextBlock>,
     /// 레이아웃이 끝난 자식 박스들.
     pub children: Vec<LayoutBox>,
 }
 
-/// 문서 트리 + 스타일시트 + 화면 너비를 받아, 레이아웃된 박스 트리를 만듭니다.
+/// 문서 트리 + 스타일시트 + 화면 너비 + 폰트를 받아, 레이아웃된 박스 트리를 만듭니다.
+/// 폰트가 필요한 이유: 글자 줄나눔을 하려면 글자 폭을 폰트에 물어봐야 하기 때문.
 /// 비유: 액자들을 실제 벽(viewport_width 폭의 벽)에 거는 작업.
-pub fn layout_tree(root: &Node, stylesheet: &Stylesheet, viewport_width: f32) -> LayoutBox {
+pub fn layout_tree(
+    root: &Node,
+    stylesheet: &Stylesheet,
+    viewport_width: f32,
+    font: &dyn FontFace,
+) -> LayoutBox {
     // 최상위 요소는 화면 왼쪽 위(0, 0)에서 시작하고, 가용 폭은 화면 전체 폭.
-    layout_node(root, stylesheet, 0.0, 0.0, viewport_width)
+    layout_node(root, stylesheet, 0.0, 0.0, viewport_width, font)
 }
 
 /// 요소 하나를 (origin_x, origin_y) 위치에, available_width 폭 안에서 배치합니다.
@@ -65,6 +72,7 @@ fn layout_node(
     origin_x: f32,
     origin_y: f32,
     available_width: f32,
+    font: &dyn FontFace,
 ) -> LayoutBox {
     let style = compute_style(node, stylesheet);
 
@@ -92,7 +100,7 @@ fn layout_node(
     let mut children = Vec::new();
     let mut cursor_y = content_y; // 다음 자식을 놓을 세로 위치.
     for child in &node.children {
-        let child_box = layout_node(child, stylesheet, content_x, cursor_y, content_width);
+        let child_box = layout_node(child, stylesheet, content_x, cursor_y, content_width, font);
         // 다음 자식은 이 자식의 '바깥 여백 포함 전체 높이'만큼 아래로.
         cursor_y += outer_height(&child_box);
         children.push(child_box);
@@ -101,14 +109,18 @@ fn layout_node(
     // 자식들이 실제로 차지한 내용 높이 = 마지막 커서 - 내용 시작점.
     let children_height = cursor_y - content_y;
 
+    // 글자가 있으면 내용 폭에 맞춰 줄나눔/정렬해 둡니다(높이도 여기서 결정됨).
+    let text_block = node.text.as_ref().map(|t| {
+        text::layout_text(t, font, style.font_size, content_width, style.text_align)
+    });
+
     // ── 3) 높이 결정 ──
     // height가 지정됐으면 그 값을, 아니면 '내용이 스스로 차지하는 높이'를 씁니다.
-    // - 자식이 있으면: 자식들이 쌓인 높이.
-    // - 자식 없이 글자만 있으면: 글자 한 줄 높이.
-    let intrinsic_height = if node.children.is_empty() && node.text.is_some() {
-        font::line_height(style.font_size)
-    } else {
-        children_height
+    // - 글자가 있으면: 줄나눔된 텍스트 전체 높이.
+    // - 그 외: 자식들이 쌓인 높이.
+    let intrinsic_height = match &text_block {
+        Some(block) => block.height,
+        None => children_height,
     };
     let content_height = style.height.unwrap_or(intrinsic_height);
     let border_box_height = content_height + 2.0 * (style.border_width + style.padding);
@@ -121,7 +133,7 @@ fn layout_node(
             width: border_box_width,
             height: border_box_height,
         },
-        text: node.text.clone(),
+        text: text_block,
         children,
     }
 }
@@ -135,13 +147,14 @@ fn outer_height(b: &LayoutBox) -> f32 {
 mod tests {
     use super::*;
     use crate::css;
+    use crate::font::BitmapFont;
 
     #[test]
     fn fills_parent_width_minus_padding() {
         // 부모 폭 300, padding 10 → 내용 폭은 300 - 20 = 280. border-box는 300.
         let sheet = css::parse(".box { padding: 10px; }");
         let node = Node::new("div").class("box");
-        let root = layout_tree(&node, &sheet, 300.0);
+        let root = layout_tree(&node, &sheet, 300.0, &BitmapFont);
         assert_eq!(root.border_box.width, 300.0);
     }
 
@@ -152,7 +165,7 @@ mod tests {
         let node = Node::new("div")
             .child(Node::new("div").class("child"))
             .child(Node::new("div").class("child"));
-        let root = layout_tree(&node, &sheet, 200.0);
+        let root = layout_tree(&node, &sheet, 200.0, &BitmapFont);
         assert_eq!(root.border_box.height, 100.0);
     }
 }

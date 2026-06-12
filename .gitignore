@@ -4,6 +4,8 @@
 # 예제가 생성하는 스냅샷 이미지(언제든 다시 만들 수 있음).
 /snapshot.bmp
 /snapshot.png
+/snapshot_ttf.bmp
+/snapshot_ttf.png
 
 # OS/에디터 부산물
 .DS_Store

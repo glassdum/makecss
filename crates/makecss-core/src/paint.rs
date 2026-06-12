@@ -7,8 +7,9 @@
 //! 픽셀 형식: u32 하나에 0x00RRGGBB. 위 8비트는 안 씁니다(창에 띄우는 softbuffer 형식).
 
 use crate::color::Color;
-use crate::font;
+use crate::fontface::FontFace;
 use crate::layout::{LayoutBox, Rect};
+use crate::text;
 
 /// 픽셀들의 모눈종이. 폭 x 높이 칸을 가지며, 각 칸은 u32 색.
 pub struct Canvas {
@@ -31,7 +32,8 @@ impl Canvas {
     }
 
     /// (x, y) 픽셀 하나에 색을 칠합니다. 반투명이면 아래 색과 섞습니다.
-    fn blend_pixel(&mut self, x: i32, y: i32, color: Color) {
+    /// 글자 도장을 찍는 text 모듈에서도 쓰므로 공개합니다.
+    pub fn blend_pixel(&mut self, x: i32, y: i32, color: Color) {
         // 화면 밖 좌표는 무시(모눈종이 바깥엔 칠하지 않음).
         if x < 0 || y < 0 || x >= self.width as i32 || y >= self.height as i32 {
             return;
@@ -71,11 +73,11 @@ impl Canvas {
 /// 레이아웃 박스 트리 전체를 캔버스에 그립니다.
 /// 부모를 먼저, 자식을 나중에 그립니다 → 자식이 부모 위에 자연스레 얹힙니다.
 /// (화가가 배경을 먼저 칠하고 그 위에 인물을 그리는 것과 같음.)
-pub fn paint(canvas: &mut Canvas, root: &LayoutBox) {
-    paint_box(canvas, root);
+pub fn paint(canvas: &mut Canvas, root: &LayoutBox, font: &dyn FontFace) {
+    paint_box(canvas, root, font);
 }
 
-fn paint_box(canvas: &mut Canvas, b: &LayoutBox) {
+fn paint_box(canvas: &mut Canvas, b: &LayoutBox, font: &dyn FontFace) {
     let bb = b.border_box;
 
     // 1) 테두리: 먼저 테두리 색으로 border-box 전체를 칠합니다.
@@ -90,56 +92,16 @@ fn paint_box(canvas: &mut Canvas, b: &LayoutBox) {
         canvas.fill_rect(inner, b.style.background);
     }
 
-    // 3) 글자: 내용 영역(테두리+안쪽여백 안쪽)의 왼쪽 위부터 그립니다.
-    if let Some(text) = &b.text {
+    // 3) 글자: 이미 줄나눔/정렬이 끝난 TextBlock을 내용 영역 왼쪽 위부터 찍습니다.
+    if let Some(block) = &b.text {
         let inner_x = bb.x + b.style.border_width + b.style.padding;
         let inner_y = bb.y + b.style.border_width + b.style.padding;
-        draw_text(
-            canvas,
-            text,
-            inner_x,
-            inner_y,
-            b.style.color,
-            b.style.font_size,
-        );
+        text::paint_text(canvas, block, inner_x, inner_y, font, b.style.font_size, b.style.color);
     }
 
     // 4) 자식들을 그 위에 그립니다.
     for child in &b.children {
-        paint_box(canvas, child);
-    }
-}
-
-/// (x, y)에서 시작해 글자들을 가로로 한 줄 그립니다.
-/// 각 글자는 5x7 비트맵. '#' 칸마다 'scale x scale' 픽셀 사각형을 칠합니다.
-/// (줄바꿈/자동 줄나눔은 아직 없음 — 다음 단계 과제.)
-fn draw_text(canvas: &mut Canvas, text: &str, x: f32, y: f32, color: Color, font_size: f32) {
-    if color.a == 0 {
-        return;
-    }
-    let scale = font::scale_for(font_size);
-    let advance = font::advance(font_size);
-
-    let mut pen_x = x; // 다음 글자를 그릴 가로 위치(펜 끝).
-    for ch in text.chars() {
-        let art = font::glyph_art(ch);
-        // 글자의 모눈종이를 훑으며 '#' 칸만 칠합니다.
-        for (row, line) in art.iter().enumerate() {
-            for (col, cell) in line.chars().enumerate() {
-                if cell != ' ' {
-                    canvas.fill_rect(
-                        Rect {
-                            x: pen_x + (col * scale) as f32,
-                            y: y + (row * scale) as f32,
-                            width: scale as f32,
-                            height: scale as f32,
-                        },
-                        color,
-                    );
-                }
-            }
-        }
-        pen_x += advance; // 다음 글자로 펜을 옮깁니다.
+        paint_box(canvas, child, font);
     }
 }
 

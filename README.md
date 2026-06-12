@@ -25,7 +25,11 @@ CSS 텍스트         1.파서       2.스타일      3.레이아웃     4.페�
 | 3. 레이아웃 | `layout.rs` | 스타일 → 위치/크기 | 박스 모델, 블록 흐름 |
 | 4. 페인트 | `paint.rs`  | 박스 → 픽셀 | 래스터화, 알파 합성 |
 
-글자는 `font.rs`의 손수 그린 5x7 비트맵 폰트로 그립니다(글자 = 점 패턴).
+글자는 두 가지 폰트로 그릴 수 있습니다(둘 다 같은 `FontFace` 약속 구현):
+- `font.rs` — 손수 그린 5x7 비트맵 폰트(파일 불필요, **기본값**)
+- `truetype.rs` — 진짜 `.ttf` 외곽선을 직접 파싱·래스터화(안티앨리어싱)
+
+줄나눔·정렬은 `text.rs`가 담당합니다.
 
 코어(주방)는 창 띄우기·마우스 같은 바깥세상을 전혀 모릅니다. 그건 `makecss-demo`
 (서빙 직원)가 담당합니다. 나중에 Python/Java/C# 바인딩도 이 "서빙" 자리에 들어옵니다.
@@ -43,8 +47,11 @@ makecss/
 │  │     ├─ style.rs     # 2) 스타일 매칭/캐스케이드
 │  │     ├─ layout.rs    # 3) 박스 모델 레이아웃
 │  │     ├─ paint.rs     # 4) 직접 픽셀 렌더링(Canvas)
-│  │     ├─ font.rs      # 5x7 비트맵 폰트 + 텍스트 그리기
-│  │     └─ lib.rs       # 정문: render() 한 방으로 위 단계 실행
+│  │     ├─ fontface.rs  # 폰트 공통 인터페이스(FontFace) + 글자 도장
+│  │     ├─ font.rs      # 5x7 비트맵 폰트(기본)
+│  │     ├─ truetype.rs  # 진짜 .ttf 파서 + 래스터화(안티앨리어싱)
+│  │     ├─ text.rs      # 자동 줄나눔(word wrap) + 정렬(text-align)
+│  │     └─ lib.rs       # 정문: render() / render_with_font()
 │  │  └─ examples/
 │  │     └─ snapshot.rs  # 장면을 BMP 이미지로 저장(화면 없이 결과 확인)
 │  └─ makecss-demo/      # winit으로 창 띄우고 픽셀을 보여주는 쇼룸
@@ -62,6 +69,12 @@ cargo run -p makecss-demo
 
 # 화면 없이 결과를 이미지로 저장 (snapshot.bmp 생성)
 cargo run -p makecss-core --example snapshot
+
+# 진짜 TTF 폰트로도 저장 (snapshot_ttf.bmp 추가 생성)
+cargo run -p makecss-core --example snapshot -- /경로/폰트.ttf
+
+# 창 데모에서 TTF 쓰기
+MAKECSS_FONT=/경로/폰트.ttf cargo run -p makecss-demo
 ```
 
 데모는 회색 페이지 위에 흰 카드 두 장, 그 안에 반투명 파란 띠를 그립니다 —
@@ -71,18 +84,17 @@ cargo run -p makecss-core --example snapshot
 
 - **셀렉터**: `*`, 태그(`div`), 클래스(`.card`)
 - **속성**: `width`, `height`, `padding`, `margin`, `border-width`, `border-color`,
-  `background`/`background-color`, `color`, `font-size`
+  `background`/`background-color`, `color`, `font-size`, `text-align`
 - **값**: `px` 길이, `#rgb`/`#rrggbb`/`rgb()`/`rgba()`/색 이름
 - **배치**: 블록 흐름(자식을 위→아래로 쌓기)
-- **텍스트**: 5x7 비트맵 폰트로 한 줄 그리기(대문자/숫자/기본 문장부호; 소문자는
-  대문자로 대체). 줄바꿈·자동 줄나눔·실제 TTF 폰트는 아직 없음.
+- **텍스트**: 대문자·소문자·숫자·문장부호, **자동 줄나눔**, **정렬**(left/center/right),
+  비트맵 폰트 또는 **진짜 TTF 폰트**(안티앨리어싱). 세로 정렬·여러 글꼴 혼용은 아직 없음.
 
 ## 로드맵 (다음 단계)
 
-1. ✅ **텍스트 렌더링(1차)** — 5x7 비트맵 폰트로 한 줄 그리기. *(완료)*
-2. **텍스트 강화** — 소문자 전용 글자, 줄바꿈/자동 줄나눔, 정렬, 실제 TTF 폰트
-3. **HTML/마크업 파서** — 트리를 코드가 아닌 텍스트로 작성
-4. **레이아웃 강화** — Flexbox, 퍼센트/`em` 단위, 변마다 다른 padding/margin
-5. **인터랙션** — 마우스/키보드 이벤트, `:hover`/`:focus`, 버튼·입력창
-6. **멀티언어 바인딩** — C ABI 노출 → Python(ctypes)/Java(JNI)/C#(P/Invoke)
-7. **실사용 다듬기** — 애니메이션/트랜지션, 고DPI, 패키징(exe/앱 번들)
+1. ✅ **텍스트 렌더링** — 비트맵 폰트, 소문자, 자동 줄나눔, 정렬, **TTF 폰트**. *(완료)*
+2. **HTML/마크업 파서** — 트리를 코드가 아닌 텍스트로 작성
+3. **레이아웃 강화** — Flexbox, 퍼센트/`em` 단위, 변마다 다른 padding/margin
+4. **인터랙션** — 마우스/키보드 이벤트, `:hover`/`:focus`, 버튼·입력창
+5. **멀티언어 바인딩** — C ABI 노출 → Python(ctypes)/Java(JNI)/C#(P/Invoke)
+6. **실사용 다듬기** — 줄바꿈(`\n`)·세로 정렬·글꼴 캐싱, 애니메이션, 고DPI, 패키징

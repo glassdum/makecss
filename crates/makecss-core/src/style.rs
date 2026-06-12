@@ -19,6 +19,14 @@ use crate::color::Color;
 use crate::css::{Declaration, Selector, Stylesheet};
 use crate::dom::Node;
 
+/// 글자 가로 정렬. text-align 속성의 값.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextAlign {
+    Left,
+    Center,
+    Right,
+}
+
 /// 한 요소에 대해 모든 충돌을 해결한 '최종' 스타일.
 /// 레이아웃과 페인트는 오직 이 구조만 보고 일합니다.
 #[derive(Debug, Clone)]
@@ -39,8 +47,10 @@ pub struct ComputedStyle {
     pub background: Color,
     /// 글자색.
     pub color: Color,
-    /// 글자 크기(px). 비트맵 폰트를 이 크기에 맞춰 확대해 그립니다.
+    /// 글자 크기(px).
     pub font_size: f32,
+    /// 글자 가로 정렬(왼쪽/가운데/오른쪽).
+    pub text_align: TextAlign,
 }
 
 impl Default for ComputedStyle {
@@ -55,6 +65,7 @@ impl Default for ComputedStyle {
             background: Color::TRANSPARENT,
             color: Color::BLACK,
             font_size: 16.0,
+            text_align: TextAlign::Left,
         }
     }
 }
@@ -156,6 +167,13 @@ fn apply_declaration(style: &mut ComputedStyle, decl: &Declaration) {
             if let Some(px) = parse_length(value) {
                 style.font_size = px;
             }
+        }
+        "text-align" => {
+            style.text_align = match value {
+                "center" => TextAlign::Center,
+                "right" => TextAlign::Right,
+                _ => TextAlign::Left,
+            };
         }
         _ => {} // 모르는 속성은 무시.
     }

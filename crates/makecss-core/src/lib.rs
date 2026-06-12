@@ -11,41 +11,58 @@
 //! ```text
 //!   1. css     : 텍스트 → 규칙 구조      (파싱)
 //!   2. style   : 규칙 → 요소별 최종 스타일 (캐스케이드)
-//!   3. layout  : 스타일 → 위치/크기       (박스 모델)
+//!   3. layout  : 스타일 → 위치/크기       (박스 모델 + 글자 줄나눔)
 //!   4. paint   : 박스 → 픽셀              (직접 렌더링)
 //! ```
+//!
+//! 글자는 FontFace 약속을 지키는 폰트로 그립니다. 두 가지 폰트가 있습니다:
+//!   - font::BitmapFont : 내장 5x7 비트맵 폰트(파일 불필요, 기본값)
+//!   - truetype::TtfFont : 진짜 .ttf 파일에서 외곽선을 읽어 그리는 폰트
 
 pub mod color;
 pub mod css;
 pub mod dom;
 pub mod font;
+pub mod fontface;
 pub mod layout;
 pub mod paint;
 pub mod style;
+pub mod text;
+pub mod truetype;
 
 // 자주 쓰는 타입들을 코어 최상위에서 바로 꺼내 쓸 수 있게 다시 내보냅니다.
 pub use color::Color;
 pub use dom::Node;
+pub use fontface::FontFace;
 pub use paint::Canvas;
 
-/// 엔진의 정문(고수준 편의 함수).
+/// 엔진의 정문(고수준 편의 함수). 내장 비트맵 폰트로 그립니다.
 ///
 /// 요소 트리 + CSS 텍스트 + 화면 크기를 받아, 완성된 픽셀(Canvas)을 돌려줍니다.
 /// 손님은 내부 4단계를 몰라도 이 한 번의 호출로 결과를 얻습니다.
-///
-/// 비유: 주방에 "이 레시피(css)로 이 재료들(root)을, 이 크기 접시(width×height)에
-/// 담아줘" 하고 주문하면, 완성된 요리(Canvas)가 나오는 것.
 pub fn render(root: &Node, css: &str, width: u32, height: u32) -> Canvas {
+    render_with_font(root, css, width, height, &font::BitmapFont)
+}
+
+/// 정문(폰트 지정 버전). 비트맵이든 TTF든 원하는 폰트로 그립니다.
+///
+/// 비유: 같은 주방, 같은 레시피라도 '어떤 도장틀(폰트)'을 쓰느냐만 바꾸는 것.
+pub fn render_with_font(
+    root: &Node,
+    css: &str,
+    width: u32,
+    height: u32,
+    font: &dyn FontFace,
+) -> Canvas {
     // 1. 파싱: CSS 텍스트 → 규칙 구조.
     let stylesheet = css::parse(css);
 
-    // 2 + 3. 스타일 계산과 레이아웃: 요소 트리를 화면 폭에 맞춰 배치.
-    //        (compute_style은 layout 내부에서 각 요소마다 호출됩니다.)
-    let layout_root = layout::layout_tree(root, &stylesheet, width as f32);
+    // 2 + 3. 스타일 계산과 레이아웃(글자 줄나눔 포함)을 화면 폭에 맞춰 수행.
+    let layout_root = layout::layout_tree(root, &stylesheet, width as f32, font);
 
     // 4. 페인트: 흰 캔버스를 만들고 박스들을 그 위에 그립니다.
     let mut canvas = Canvas::new(width, height, Color::WHITE);
-    paint::paint(&mut canvas, &layout_root);
+    paint::paint(&mut canvas, &layout_root, font);
     canvas
 }
 
