@@ -16,40 +16,32 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 
 use makecss_core::truetype::TtfFont;
-use makecss_core::{render, render_with_font, Canvas, Node};
+use makecss_core::{render_html, render_html_with_font, Canvas};
 
 const WIDTH: u32 = 460;
 const HEIGHT: u32 = 440;
 
-/// 보여줄 문서 트리와 CSS를 만듭니다(비트맵/TTF가 똑같이 사용).
-fn scene() -> (Node, &'static str) {
-    let root = Node::new("div")
-        .class("page")
-        .child(Node::new("div").class("title").text("makecss"))
-        .child(
-            Node::new("div").class("card").child(
-                Node::new("div").class("para").text(
-                    "The quick brown fox jumps over the lazy dog. \
-                     This long sentence wraps automatically to fit \
-                     inside the card width.",
-                ),
-            ),
-        )
-        .child(Node::new("div").class("bar").text("left aligned text"))
-        .child(
-            Node::new("div")
-                .class("bar")
-                .class("c")
-                .text("center aligned text"),
-        )
-        .child(
-            Node::new("div")
-                .class("bar")
-                .class("r")
-                .text("right aligned text"),
-        );
+/// 보여줄 화면을 'HTML 문자열'로 작성합니다 — 더 이상 Rust 코드로 트리를 조립하지 않습니다!
+fn html() -> &'static str {
+    r#"
+    <div class="page">
+        <div class="title">makecss</div>
+        <div class="card">
+            <div class="para">
+                The quick brown fox jumps over the lazy dog.
+                This long sentence wraps automatically to fit inside the card width.
+            </div>
+        </div>
+        <div class="bar">left aligned text</div>
+        <div class="bar c">center aligned text</div>
+        <div class="bar r">right aligned text</div>
+    </div>
+    "#
+}
 
-    let css = r#"
+/// 화면을 꾸미는 CSS.
+fn css() -> &'static str {
+    r#"
         .page  { background: #eef2f7; padding: 20px; }
         .title { font-size: 32px; color: #1a1a2e; padding: 4px; }
         .card  { background: white; border-width: 1px; border-color: #ccccdd;
@@ -59,16 +51,14 @@ fn scene() -> (Node, &'static str) {
                  padding: 6px; margin: 6px; }
         .c     { text-align: center; }
         .r     { text-align: right; }
-    "#;
-
-    (root, css)
+    "#
 }
 
 fn main() {
-    let (root, css) = scene();
+    let (html, css) = (html(), css());
 
     // 1) 기본 비트맵 폰트로 렌더 → snapshot.bmp
-    let canvas = render(&root, css, WIDTH, HEIGHT);
+    let canvas = render_html(html, css, WIDTH, HEIGHT);
     write_bmp(&canvas, "snapshot.bmp").expect("BMP 저장 실패");
     println!("저장: snapshot.bmp ({WIDTH}x{HEIGHT}) — 비트맵 폰트");
 
@@ -80,7 +70,7 @@ fn main() {
         match std::fs::read(&path) {
             Ok(bytes) => match TtfFont::from_bytes(bytes) {
                 Ok(font) => {
-                    let canvas = render_with_font(&root, css, WIDTH, HEIGHT, &font);
+                    let canvas = render_html_with_font(html, css, WIDTH, HEIGHT, &font);
                     write_bmp(&canvas, "snapshot_ttf.bmp").expect("BMP 저장 실패");
                     println!("저장: snapshot_ttf.bmp ({WIDTH}x{HEIGHT}) — TTF: {path}");
                 }

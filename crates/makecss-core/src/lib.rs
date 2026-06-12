@@ -24,6 +24,7 @@ pub mod css;
 pub mod dom;
 pub mod font;
 pub mod fontface;
+pub mod html;
 pub mod layout;
 pub mod paint;
 pub mod style;
@@ -64,6 +65,27 @@ pub fn render_with_font(
     let mut canvas = Canvas::new(width, height, Color::WHITE);
     paint::paint(&mut canvas, &layout_root, font);
     canvas
+}
+
+/// HTML + CSS 문자열을 받아 바로 그립니다(내장 비트맵 폰트).
+///
+/// 요소 트리를 Rust 코드로 조립하는 대신 `<div class="card">...</div>` 처럼
+/// 마크업으로 작성할 수 있습니다.
+pub fn render_html(html: &str, css: &str, width: u32, height: u32) -> Canvas {
+    let root = html::parse(html);
+    render(&root, css, width, height)
+}
+
+/// render_html의 폰트 지정 버전(TTF 등).
+pub fn render_html_with_font(
+    html: &str,
+    css: &str,
+    width: u32,
+    height: u32,
+    font: &dyn FontFace,
+) -> Canvas {
+    let root = html::parse(html);
+    render_with_font(&root, css, width, height, font)
 }
 
 #[cfg(test)]

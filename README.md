@@ -51,7 +51,8 @@ makecss/
 │  │     ├─ font.rs      # 5x7 비트맵 폰트(기본)
 │  │     ├─ truetype.rs  # 진짜 .ttf 파서 + 래스터화(안티앨리어싱)
 │  │     ├─ text.rs      # 자동 줄나눔(word wrap) + 정렬(text-align)
-│  │     └─ lib.rs       # 정문: render() / render_with_font()
+│  │     ├─ html.rs      # HTML 파서: 마크업 → Node 트리
+│  │     └─ lib.rs       # 정문: render() / render_html() / *_with_font()
 │  │  └─ examples/
 │  │     └─ snapshot.rs  # 장면을 BMP 이미지로 저장(화면 없이 결과 확인)
 │  └─ makecss-demo/      # winit으로 창 띄우고 픽셀을 보여주는 쇼룸
@@ -77,8 +78,17 @@ cargo run -p makecss-core --example snapshot -- /경로/폰트.ttf
 MAKECSS_FONT=/경로/폰트.ttf cargo run -p makecss-demo
 ```
 
-데모는 회색 페이지 위에 흰 카드 두 장, 그 안에 반투명 파란 띠를 그립니다 —
-`width/height/padding/margin/border/background`와 박스 모델, 알파 합성이 한눈에 보입니다.
+## 가장 작은 예제
+
+```rust
+use makecss_core::render_html;
+
+let html = r#"<div class="card">Hello, makecss!</div>"#;
+let css  = r#".card { background: #eef; padding: 12px; font-size: 20px; }"#;
+
+let canvas = render_html(html, css, 320, 80); // canvas.pixels = Vec<u32> (0x00RRGGBB)
+// 진짜 폰트로: render_html_with_font(html, css, w, h, &TtfFont::from_bytes(bytes)?)
+```
 
 ## 지금 지원하는 CSS (MVP)
 
@@ -89,12 +99,14 @@ MAKECSS_FONT=/경로/폰트.ttf cargo run -p makecss-demo
 - **배치**: 블록 흐름(자식을 위→아래로 쌓기)
 - **텍스트**: 대문자·소문자·숫자·문장부호, **자동 줄나눔**, **정렬**(left/center/right),
   비트맵 폰트 또는 **진짜 TTF 폰트**(안티앨리어싱). 세로 정렬·여러 글꼴 혼용은 아직 없음.
+- **HTML**: `<div class="card">...</div>` 마크업 → Node 트리. 중첩, `class` 속성,
+  self-closing/void 태그(`<br>`), 주석, 기본 엔티티 지원. 스타일 상속·`id`는 아직 없음.
 
 ## 로드맵 (다음 단계)
 
 1. ✅ **텍스트 렌더링** — 비트맵 폰트, 소문자, 자동 줄나눔, 정렬, **TTF 폰트**. *(완료)*
-2. **HTML/마크업 파서** — 트리를 코드가 아닌 텍스트로 작성
-3. **레이아웃 강화** — Flexbox, 퍼센트/`em` 단위, 변마다 다른 padding/margin
+2. ✅ **HTML 파서** — `<div class="card">...</div>` 마크업으로 화면 작성. *(완료)*
+3. **레이아웃 강화** — Flexbox, 퍼센트/`em` 단위, 변마다 다른 padding/margin, 스타일 상속
 4. **인터랙션** — 마우스/키보드 이벤트, `:hover`/`:focus`, 버튼·입력창
 5. **멀티언어 바인딩** — C ABI 노출 → Python(ctypes)/Java(JNI)/C#(P/Invoke)
 6. **실사용 다듬기** — 줄바꿈(`\n`)·세로 정렬·글꼴 캐싱, 애니메이션, 고DPI, 패키징

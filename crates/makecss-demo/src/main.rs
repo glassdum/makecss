@@ -16,7 +16,7 @@ use std::num::NonZeroU32;
 use std::rc::Rc;
 
 use makecss_core::truetype::TtfFont;
-use makecss_core::{render, render_with_font, Node};
+use makecss_core::{render_html, render_html_with_font};
 use softbuffer::{Context, Surface};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -24,24 +24,24 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
-/// 화면에 보여줄 '문서'와 'CSS'를 만듭니다.
-/// 지금은 HTML 파서가 없으니 요소 트리를 코드로 직접 조립합니다(다음 단계에서 HTML 지원).
+/// 화면에 보여줄 'HTML'과 'CSS'를 돌려줍니다.
+/// 이제 요소 트리를 코드로 조립하지 않고 마크업으로 작성합니다.
 /// 소문자 · 자동 줄나눔 · 정렬을 한 화면에서 보여줍니다.
-fn scene() -> (Node, String) {
-    let root = Node::new("div")
-        .class("page")
-        .child(Node::new("div").class("title").text("makecss demo"))
-        .child(
-            Node::new("div").class("card").child(
-                Node::new("div").class("para").text(
-                    "The quick brown fox jumps over the lazy dog. \
-                     This sentence wraps automatically to fit the card.",
-                ),
-            ),
-        )
-        .child(Node::new("div").class("bar").text("left aligned"))
-        .child(Node::new("div").class("bar").class("c").text("center aligned"))
-        .child(Node::new("div").class("bar").class("r").text("right aligned"));
+fn scene() -> (&'static str, &'static str) {
+    let html = r#"
+        <div class="page">
+            <div class="title">makecss demo</div>
+            <div class="card">
+                <div class="para">
+                    The quick brown fox jumps over the lazy dog.
+                    This sentence wraps automatically to fit the card.
+                </div>
+            </div>
+            <div class="bar">left aligned</div>
+            <div class="bar c">center aligned</div>
+            <div class="bar r">right aligned</div>
+        </div>
+    "#;
 
     let css = r#"
         .page  { background: #eef2f7; padding: 16px; }
@@ -55,7 +55,7 @@ fn scene() -> (Node, String) {
         .r     { text-align: right; }
     "#;
 
-    (root, css.to_string())
+    (html, css)
 }
 
 /// 앱 상태: 창, 픽셀을 붙일 표면(surface), 그리고 선택적 TTF 폰트.
@@ -115,10 +115,10 @@ impl ApplicationHandler for App {
 
                 // ── 여기가 핵심: 엔진을 호출해 픽셀을 얻습니다. ──
                 // TTF 폰트가 로드돼 있으면 그것으로, 아니면 내장 비트맵 폰트로.
-                let (root, css) = scene();
+                let (html, css) = scene();
                 let canvas = match &self.font {
-                    Some(font) => render_with_font(&root, &css, w, h, font),
-                    None => render(&root, &css, w, h),
+                    Some(font) => render_html_with_font(html, css, w, h, font),
+                    None => render_html(html, css, w, h),
                 };
 
                 // 얻은 픽셀을 창 표면 버퍼에 그대로 복사한 뒤 화면에 띄웁니다.
