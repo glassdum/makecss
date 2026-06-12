@@ -15,8 +15,9 @@
 use std::num::NonZeroU32;
 use std::rc::Rc;
 
+use makecss_core::font::BitmapFont;
 use makecss_core::truetype::TtfFont;
-use makecss_core::{render_html, render_html_with_font};
+use makecss_core::{render_html_with_font_hover, FontFace};
 use softbuffer::{Context, Surface};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -40,8 +41,8 @@ fn scene() -> (&'static str, &'static str) {
             <div class="cards">
                 <div class="card">
                     <div class="badge">new</div>
-                    <div class="h">flex</div>
-                    <div class="p">cards share the row equally.</div>
+                    <div class="h">hover me</div>
+                    <div class="p">move the mouse over a card.</div>
                 </div>
                 <div class="card">
                     <div class="h">stretch</div>
@@ -51,20 +52,23 @@ fn scene() -> (&'static str, &'static str) {
         </div>
     "#;
 
+    // .link:hover, .card:hover 로 마우스 올렸을 때 색이 바뀝니다(상속 덕분에 글자색만 지정).
     let css = r#"
-        .page   { background: #eef2f7; padding: 16px; }
-        .nav    { display: flex; justify-content: space-between; align-items: center;
-                  background: #1a1a2e; padding: 12px; }
-        .brand  { color: white; font-size: 24px; }
-        .links  { display: flex; gap: 16px; }
-        .link   { color: #aab4d4; font-size: 16px; }
-        .cards  { display: flex; align-items: stretch; gap: 12px; margin: 14px; }
-        .card   { flex: 1; position: relative; background: white;
-                  border-width: 1px; border-color: #ccccdd; padding: 12px; }
-        .h      { font-size: 20px; color: #1a1a2e; }
-        .p      { font-size: 14px; color: #445566; }
-        .badge  { position: absolute; top: 8px; right: 8px;
-                  background: #e0457b; color: white; font-size: 12px; padding: 4px; }
+        .page       { background: #eef2f7; padding: 16px; color: #223355; }
+        .nav        { display: flex; justify-content: space-between; align-items: center;
+                      background: #1a1a2e; padding: 12px; }
+        .brand      { color: white; font-size: 24px; }
+        .links      { display: flex; gap: 16px; }
+        .link       { color: #aab4d4; font-size: 16px; padding: 4px; }
+        .link:hover { color: white; background: #34345a; }
+        .cards      { display: flex; align-items: stretch; gap: 12px; margin: 14px; }
+        .card       { flex: 1; position: relative; background: white;
+                      border-width: 1px; border-color: #ccccdd; padding: 12px; }
+        .card:hover { background: #fff0f6; border-color: #e0457b; }
+        .h          { font-size: 20px; color: #1a1a2e; }
+        .p          { font-size: 14px; color: #445566; }
+        .badge      { position: absolute; top: 8px; right: 8px;
+                      background: #e0457b; color: white; font-size: 12px; padding: 4px; }
     "#;
 
     (html, css)
@@ -76,6 +80,8 @@ struct App {
     window: Option<Rc<Window>>,
     surface: Option<Surface<Rc<Window>, Rc<Window>>>,
     font: Option<TtfFont>,
+    /// 마우스 포인터 위치(물리 픽셀). 창 밖이면 None. :hover 판정에 씁니다.
+    pointer: Option<(f32, f32)>,
 }
 
 impl ApplicationHandler for App {
@@ -106,6 +112,21 @@ impl ApplicationHandler for App {
             // 창 닫기 버튼 → 프로그램 종료.
             WindowEvent::CloseRequested => event_loop.exit(),
 
+            // 마우스 이동 → 포인터 위치 갱신 후 다시 그리기 요청(:hover 갱신).
+            WindowEvent::CursorMoved { position, .. } => {
+                self.pointer = Some((position.x as f32, position.y as f32));
+                if let Some(w) = &self.window {
+                    w.request_redraw();
+                }
+            }
+            // 마우스가 창을 벗어남 → hover 해제.
+            WindowEvent::CursorLeft { .. } => {
+                self.pointer = None;
+                if let Some(w) = &self.window {
+                    w.request_redraw();
+                }
+            }
+
             // "다시 그려야 함" → 엔진에게 픽셀을 받아 창에 붙입니다.
             WindowEvent::RedrawRequested => {
                 let (Some(window), Some(surface)) =
@@ -125,13 +146,14 @@ impl ApplicationHandler for App {
                     .resize(NonZeroU32::new(w).unwrap(), NonZeroU32::new(h).unwrap())
                     .unwrap();
 
-                // ── 여기가 핵심: 엔진을 호출해 픽셀을 얻습니다. ──
+                // ── 여기가 핵심: 엔진을 호출해 픽셀을 얻습니다(마우스 위치로 :hover 반영). ──
                 // TTF 폰트가 로드돼 있으면 그것으로, 아니면 내장 비트맵 폰트로.
                 let (html, css) = scene();
-                let canvas = match &self.font {
-                    Some(font) => render_html_with_font(html, css, w, h, font),
-                    None => render_html(html, css, w, h),
+                let font: &dyn FontFace = match &self.font {
+                    Some(ttf) => ttf,
+                    None => &BitmapFont,
                 };
+                let canvas = render_html_with_font_hover(html, css, w, h, font, self.pointer);
 
                 // 얻은 픽셀을 창 표면 버퍼에 그대로 복사한 뒤 화면에 띄웁니다.
                 let mut buffer = surface.buffer_mut().unwrap();
@@ -170,6 +192,7 @@ fn main() {
         window: None,
         surface: None,
         font,
+        pointer: None,
     };
     event_loop.run_app(&mut app).unwrap();
 }

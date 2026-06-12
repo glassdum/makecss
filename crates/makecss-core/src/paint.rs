@@ -72,36 +72,53 @@ impl Canvas {
 
 /// 레이아웃 박스 트리 전체를 캔버스에 그립니다.
 /// 부모를 먼저, 자식을 나중에 그립니다 → 자식이 부모 위에 자연스레 얹힙니다.
-/// (화가가 배경을 먼저 칠하고 그 위에 인물을 그리는 것과 같음.)
-pub fn paint(canvas: &mut Canvas, root: &LayoutBox, font: &dyn FontFace) {
-    paint_box(canvas, root, font);
+///
+/// pointer: 마우스 위치(px). 어떤 박스 위에 있으면 그 박스의 :hover 스타일(색)을 씁니다.
+/// 레이아웃은 그대로이고 '색만' 바뀌므로, 마우스 이동 시 재배치 없이 다시 칠하기만 하면 됩니다.
+pub fn paint(canvas: &mut Canvas, root: &LayoutBox, font: &dyn FontFace, pointer: Option<(f32, f32)>) {
+    paint_box(canvas, root, font, pointer);
 }
 
-fn paint_box(canvas: &mut Canvas, b: &LayoutBox, font: &dyn FontFace) {
+/// 점 (px, py)가 사각형 안에 있는지.
+fn contains(r: Rect, px: f32, py: f32) -> bool {
+    px >= r.x && px < r.x + r.width && py >= r.y && py < r.y + r.height
+}
+
+fn paint_box(canvas: &mut Canvas, b: &LayoutBox, font: &dyn FontFace, pointer: Option<(f32, f32)>) {
     let bb = b.border_box;
 
+    // 이 박스 위에 마우스가 있으면 hover 스타일(색)을 고릅니다. 없으면 기본 스타일.
+    let hovered = pointer.map(|(px, py)| contains(bb, px, py)).unwrap_or(false);
+    let s = if hovered {
+        b.hover_style.as_ref().unwrap_or(&b.style)
+    } else {
+        &b.style
+    };
+    // 테두리 두께/패딩은 레이아웃이 정한 기본값을 써서 기하 일관성을 지키고,
+    // 색(테두리색/배경/글자색)만 hover 스타일을 반영합니다.
+    let edge = b.style.border_width;
+
     // 1) 테두리: 먼저 테두리 색으로 border-box 전체를 칠합니다.
-    if b.style.border_width > 0.0 && b.style.border_color.a > 0 {
-        canvas.fill_rect(bb, b.style.border_color);
+    if edge > 0.0 && s.border_color.a > 0 {
+        canvas.fill_rect(bb, s.border_color);
     }
 
     // 2) 배경: 테두리 안쪽(padding-box) 영역을 배경색으로 칠합니다.
-    //    테두리 위에 배경을 얹으면, 테두리는 가장자리에만 남습니다.
-    if b.style.background.a > 0 {
-        let inner = inset(bb, b.style.border_width);
-        canvas.fill_rect(inner, b.style.background);
+    if s.background.a > 0 {
+        let inner = inset(bb, edge);
+        canvas.fill_rect(inner, s.background);
     }
 
     // 3) 글자: 이미 줄나눔/정렬이 끝난 TextBlock을 내용 영역 왼쪽 위부터 찍습니다.
     if let Some(block) = &b.text {
-        let inner_x = bb.x + b.style.border_width + b.style.padding;
-        let inner_y = bb.y + b.style.border_width + b.style.padding;
-        text::paint_text(canvas, block, inner_x, inner_y, font, b.style.font_size, b.style.color);
+        let inner_x = bb.x + edge + b.style.padding;
+        let inner_y = bb.y + edge + b.style.padding;
+        text::paint_text(canvas, block, inner_x, inner_y, font, b.style.font_size, s.color);
     }
 
     // 4) 자식들을 그 위에 그립니다.
     for child in &b.children {
-        paint_box(canvas, child, font);
+        paint_box(canvas, child, font, pointer);
     }
 }
 

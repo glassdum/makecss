@@ -16,7 +16,7 @@
 //! 점수가 같으면 '나중에 쓰인 규칙'이 이깁니다(CSS의 실제 규칙과 동일).
 
 use crate::color::Color;
-use crate::css::{Declaration, Selector, Stylesheet};
+use crate::css::{Declaration, Selector, SimpleSelector, Stylesheet};
 use crate::dom::Node;
 
 /// 글자 가로 정렬. text-align 속성의 값.
@@ -80,7 +80,7 @@ pub enum AlignItems {
 
 /// 한 요소에 대해 모든 충돌을 해결한 '최종' 스타일.
 /// 레이아웃과 페인트는 오직 이 구조만 보고 일합니다.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComputedStyle {
     /// 내용 영역의 너비(px). None이면 "부모만큼 채움".
     pub width: Option<f32>,
@@ -159,40 +159,56 @@ impl Default for ComputedStyle {
 
 /// 한 요소가 주어진 셀렉터에 해당되는지 검사합니다.
 /// 비유: 사람의 이름표(tag)와 배지(class)를 보고 "이 규칙은 너에게 해당돼"라고 판정.
-fn matches(node: &Node, selector: &Selector) -> bool {
-    match selector {
-        Selector::Universal => true,
-        Selector::Type(name) => &node.tag == name,
-        Selector::Class(name) => node.classes.iter().any(|c| c == name),
-    }
+fn matches(node: &Node, selector: &Selector, hovering: bool) -> bool {
+    // 단순 셀렉터가 맞고, :hover 조건이면 지금 hover 중일 때만 맞습니다.
+    let simple_ok = match &selector.simple {
+        SimpleSelector::Universal => true,
+        SimpleSelector::Type(name) => &node.tag == name,
+        SimpleSelector::Class(name) => node.classes.iter().any(|c| c == name),
+    };
+    simple_ok && (!selector.hover || hovering)
 }
 
-/// 셀렉터의 명시도(구체성) 점수.
+/// 셀렉터의 명시도(구체성) 점수. :hover 가상클래스는 클래스만큼(+10) 더해집니다.
 fn specificity(selector: &Selector) -> u32 {
-    match selector {
-        Selector::Universal => 0,
-        Selector::Type(_) => 1,
-        Selector::Class(_) => 10,
-    }
+    let base = match &selector.simple {
+        SimpleSelector::Universal => 0,
+        SimpleSelector::Type(_) => 1,
+        SimpleSelector::Class(_) => 10,
+    };
+    base + if selector.hover { 10 } else { 0 }
 }
 
 /// 한 요소에 적용될 모든 선언을, 이긴 순서대로 모아 ComputedStyle을 만듭니다.
 ///
+/// - parent: 부모의 계산된 스타일. color/font-size/text-align 같은 '상속' 속성의
+///   출발점이 됩니다(부모로부터 유전). 박스 속성(width/padding 등)은 상속되지 않습니다.
+/// - hovering: 지금 이 요소에 마우스가 올라가 있는지. true면 `:hover` 규칙도 적용됩니다.
+///
 /// 동작:
-///   1) 스타일시트의 모든 규칙을 훑으며, 이 요소에 맞는 규칙을 찾습니다.
-///   2) (명시도, 등장순서) 점수로 정렬합니다 — 약한 것부터 강한 것 순으로.
-///   3) 약한 것부터 차례로 덮어씁니다. 그러면 가장 강한 규칙이 최종 값으로 남습니다.
-///      (페인트 가게에서 같은 벽에 여러 번 칠하면 마지막 색이 남는 것과 같습니다.)
-pub fn compute_style(node: &Node, stylesheet: &Stylesheet) -> ComputedStyle {
-    // (점수, 등장순서, 선언들) 묶음을 모읍니다.
-    let mut matched: Vec<(u32, usize, &Vec<Declaration>)> = Vec::new();
+///   1) 상속 속성을 부모 값으로 초기화하고, 나머지는 기본값에서 출발.
+///   2) 맞는 규칙들을 (명시도, 등장순서)로 정렬해 약→강 순으로 덮어씁니다.
+pub fn compute_style(
+    node: &Node,
+    stylesheet: &Stylesheet,
+    parent: &ComputedStyle,
+    hovering: bool,
+) -> ComputedStyle {
+    // 1) 상속: 부모로부터 물려받는 속성을 출발점으로.
+    let mut style = ComputedStyle {
+        color: parent.color,
+        font_size: parent.font_size,
+        text_align: parent.text_align,
+        ..ComputedStyle::default()
+    };
 
+    // 2) (점수, 등장순서, 선언들) 묶음을 모읍니다.
+    let mut matched: Vec<(u32, usize, &Vec<Declaration>)> = Vec::new();
     for (order, rule) in stylesheet.rules.iter().enumerate() {
-        // 한 규칙에 셀렉터가 여러 개면, 그 중 '가장 구체적인' 것으로 점수를 매깁니다.
         let best = rule
             .selectors
             .iter()
-            .filter(|sel| matches(node, sel))
+            .filter(|sel| matches(node, sel, hovering))
             .map(specificity)
             .max();
         if let Some(score) = best {
@@ -200,11 +216,8 @@ pub fn compute_style(node: &Node, stylesheet: &Stylesheet) -> ComputedStyle {
         }
     }
 
-    // 약한 것 → 강한 것 순으로 정렬. 점수가 같으면 먼저 쓰인 규칙이 먼저(=나중 것이 이김).
+    // 약한 것 → 강한 것 순. 점수가 같으면 나중 규칙이 이깁니다.
     matched.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
-
-    // 기본값에서 출발해, 약한 규칙부터 차례로 덮어씁니다.
-    let mut style = ComputedStyle::default();
     for (_, _, declarations) in matched {
         for decl in declarations {
             apply_declaration(&mut style, decl);
@@ -339,12 +352,16 @@ mod tests {
     use super::*;
     use crate::css;
 
+    fn root() -> ComputedStyle {
+        ComputedStyle::default()
+    }
+
     #[test]
     fn class_beats_type() {
         // div 는 파랑, .card 는 빨강. 둘 다 맞지만 .card(클래스)가 더 구체적 → 빨강 승.
         let sheet = css::parse("div { background: blue; } .card { background: red; }");
         let node = Node::new("div").class("card");
-        let style = compute_style(&node, &sheet);
+        let style = compute_style(&node, &sheet, &root(), false);
         assert_eq!(style.background, Color::rgb(255, 0, 0));
     }
 
@@ -352,8 +369,28 @@ mod tests {
     fn parses_lengths() {
         let sheet = css::parse(".x { width: 200px; padding: 8; }");
         let node = Node::new("div").class("x");
-        let style = compute_style(&node, &sheet);
+        let style = compute_style(&node, &sheet, &root(), false);
         assert_eq!(style.width, Some(200.0));
         assert_eq!(style.padding, 8.0);
+    }
+
+    #[test]
+    fn color_inherits_but_background_does_not() {
+        // 부모가 color 파랑. 자식은 지정 없음 → color는 상속(파랑), background는 기본(투명).
+        let sheet = css::parse("");
+        let parent = ComputedStyle { color: Color::rgb(0, 0, 255), ..ComputedStyle::default() };
+        let child = compute_style(&Node::new("span"), &sheet, &parent, false);
+        assert_eq!(child.color, Color::rgb(0, 0, 255)); // 상속됨
+        assert_eq!(child.background, Color::TRANSPARENT); // 상속 안 됨
+    }
+
+    #[test]
+    fn hover_rules_apply_only_when_hovering() {
+        let sheet = css::parse(".b { background: white; } .b:hover { background: black; }");
+        let node = Node::new("div").class("b");
+        let normal = compute_style(&node, &sheet, &root(), false);
+        let hovered = compute_style(&node, &sheet, &root(), true);
+        assert_eq!(normal.background, Color::WHITE);
+        assert_eq!(hovered.background, Color::BLACK);
     }
 }

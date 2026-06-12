@@ -6,6 +6,8 @@
 /snapshot.png
 /snapshot_ttf.bmp
 /snapshot_ttf.png
+/snapshot_hover.bmp
+/snapshot_hover.png
 
 # OS/에디터 부산물
 .DS_Store

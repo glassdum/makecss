@@ -52,6 +52,9 @@ pub struct Rect {
 #[derive(Debug, Clone)]
 pub struct LayoutBox {
     pub style: ComputedStyle,
+    /// 마우스가 이 박스 위에 있을 때 쓸 스타일(:hover 규칙 반영). 차이가 없으면 None.
+    /// 레이아웃은 기본 style로 끝내고, paint가 포인터에 따라 이 스타일을 골라 씁니다.
+    pub hover_style: Option<ComputedStyle>,
     /// 테두리 바깥선 기준 사각형(= border-box). 배경/테두리를 칠할 영역.
     pub border_box: Rect,
     /// 줄나눔·정렬까지 끝난 글자 내용(있으면).
@@ -69,14 +72,18 @@ pub fn layout_tree(
     font: &dyn FontFace,
 ) -> LayoutBox {
     let viewport = Rect { x: 0.0, y: 0.0, width: viewport_width, height: viewport_height };
-    layout_node(root, stylesheet, 0.0, 0.0, viewport_width, viewport, viewport, font).unwrap_or(
-        LayoutBox {
-            style: ComputedStyle::default(),
-            border_box: Rect { x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
-            text: None,
-            children: Vec::new(),
-        },
+    // 최상위의 부모 스타일은 기본값(검정 글자, 16px 등) — 상속의 출발점.
+    let root_parent = ComputedStyle::default();
+    layout_node(
+        root, stylesheet, 0.0, 0.0, viewport_width, viewport, viewport, font, &root_parent,
     )
+    .unwrap_or(LayoutBox {
+        style: ComputedStyle::default(),
+        hover_style: None,
+        border_box: Rect { x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
+        text: None,
+        children: Vec::new(),
+    })
 }
 
 /// 요소 하나를 배치합니다. display:none이면 None.
@@ -85,6 +92,7 @@ pub fn layout_tree(
 /// - available_width: 이 요소가 써도 되는 가로 공간(마진/테두리/패딩 포함).
 /// - cb: 위치 지정된 가장 가까운 조상의 내용 영역(absolute 기준).
 /// - viewport: 화면 전체 영역(fixed 기준).
+/// - parent_style: 부모의 계산된 스타일(color/font-size 등 상속의 출발점).
 #[allow(clippy::too_many_arguments)]
 fn layout_node(
     node: &Node,
@@ -95,11 +103,15 @@ fn layout_node(
     cb: Rect,
     viewport: Rect,
     font: &dyn FontFace,
+    parent_style: &ComputedStyle,
 ) -> Option<LayoutBox> {
-    let style = compute_style(node, sheet);
+    let style = compute_style(node, sheet, parent_style, false);
     if style.display == Display::None {
         return None;
     }
+    // 마우스가 올라갔을 때의 스타일(:hover 반영). 기본과 다를 때만 보관.
+    let hover = compute_style(node, sheet, parent_style, true);
+    let hover_style = if hover != style { Some(hover) } else { None };
 
     let out_of_flow = matches!(style.position, Position::Absolute | Position::Fixed);
     let establishes_cb = style.position != Position::Static;
@@ -124,7 +136,8 @@ fn layout_node(
                     (Some(l), Some(r)) => (base.width - l - r - 2.0 * (bd + pd)).max(0.0),
                     // 그 외 흐름 밖 요소는 '내용 크기에 맞춰 줄어듭니다'(shrink-to-fit).
                     _ => {
-                        let stf = (intrinsic_width(node, sheet, font) - 2.0 * edge).max(0.0);
+                        let stf =
+                            (intrinsic_width(node, sheet, font, parent_style) - 2.0 * edge).max(0.0);
                         stf.min((base.width - 2.0 * edge).max(0.0))
                     }
                 }
@@ -153,7 +166,7 @@ fn layout_node(
     let mut in_flow: Vec<&Node> = Vec::new();
     let mut out_flow: Vec<&Node> = Vec::new();
     for child in &node.children {
-        let cs = compute_style(child, sheet);
+        let cs = compute_style(child, sheet, &style, false);
         if cs.display == Display::None {
             continue;
         }
@@ -170,11 +183,11 @@ fn layout_node(
         .as_ref()
         .map(|t| text::layout_text(t, font, style.font_size, content_width, style.text_align));
 
-    // ── 흐름 안 자식 배치(block 또는 flex) ──
+    // ── 흐름 안 자식 배치(block 또는 flex). 이 요소의 style이 자식의 '부모 스타일'. ──
     let (mut children, children_height) = if style.display == Display::Flex {
         layout_flex(&style, cx, cy, content_width, &in_flow, sheet, cb_children, viewport, font)
     } else {
-        layout_block(cx, cy, content_width, &in_flow, sheet, cb_children, viewport, font)
+        layout_block(cx, cy, content_width, &in_flow, sheet, cb_children, viewport, font, &style)
     };
 
     // ── 높이 결정 ──
@@ -192,13 +205,16 @@ fn layout_node(
         cb
     };
     for child in out_flow {
-        if let Some(b) = layout_node(child, sheet, cx, cy, content_width, cb_final, viewport, font) {
+        if let Some(b) =
+            layout_node(child, sheet, cx, cy, content_width, cb_final, viewport, font, &style)
+        {
             children.push(b);
         }
     }
 
     let mut layout_box = LayoutBox {
         style: style.clone(),
+        hover_style,
         border_box: Rect { x: bx, y: by, width: border_box_width, height: border_box_height },
         text: text_block,
         children,
@@ -241,11 +257,14 @@ fn layout_block(
     cb: Rect,
     viewport: Rect,
     font: &dyn FontFace,
+    parent_style: &ComputedStyle,
 ) -> (Vec<LayoutBox>, f32) {
     let mut boxes = Vec::new();
     let mut cursor_y = cy;
     for child in children {
-        if let Some(b) = layout_node(child, sheet, cx, cursor_y, content_width, cb, viewport, font) {
+        if let Some(b) =
+            layout_node(child, sheet, cx, cursor_y, content_width, cb, viewport, font, parent_style)
+        {
             cursor_y += outer_height(&b);
             boxes.push(b);
         }
@@ -280,16 +299,16 @@ fn layout_flex(
     let mut grows: Vec<f32> = Vec::with_capacity(n);
     let mut base_main: Vec<f32> = Vec::with_capacity(n);
     for child in children {
-        let cs = compute_style(child, sheet);
+        let cs = compute_style(child, sheet, style, false);
         grows.push(cs.flex_grow);
         let avail = if row {
-            intrinsic_width(child, sheet, font)
+            intrinsic_width(child, sheet, font, style)
         } else if style.align_items == AlignItems::Stretch {
             content_width
         } else {
-            intrinsic_width(child, sheet, font).min(content_width)
+            intrinsic_width(child, sheet, font, style).min(content_width)
         };
-        let b = layout_node(child, sheet, 0.0, 0.0, avail, cb, viewport, font)
+        let b = layout_node(child, sheet, 0.0, 0.0, avail, cb, viewport, font, style)
             .expect("flex 자식은 display:none이 아님");
         base_main.push(if row { outer_width(&b) } else { outer_height(&b) });
         boxes.push(b);
@@ -324,8 +343,9 @@ fn layout_flex(
         if (final_main[i] - base_main[i]).abs() > 0.01 {
             if row {
                 // 가로: 너비가 바뀌면 줄나눔이 달라질 수 있어 다시 배치.
-                boxes[i] = layout_node(children[i], sheet, 0.0, 0.0, final_main[i], cb, viewport, font)
-                    .unwrap();
+                boxes[i] =
+                    layout_node(children[i], sheet, 0.0, 0.0, final_main[i], cb, viewport, font, style)
+                        .unwrap();
             } else {
                 // 세로: 높이만 늘린다.
                 let mm = boxes[i].style.margin;
@@ -403,8 +423,13 @@ fn cross_offset(a: AlignItems, container_cross: f32, item_cross: f32) -> f32 {
 
 /// 요소의 '자연 너비'(max-content): 줄나눔 없이 필요한 가로 폭.
 /// flex에서 각 자식의 기본 크기를 정할 때 씁니다.
-fn intrinsic_width(node: &Node, sheet: &Stylesheet, font: &dyn FontFace) -> f32 {
-    let s = compute_style(node, sheet);
+fn intrinsic_width(
+    node: &Node,
+    sheet: &Stylesheet,
+    font: &dyn FontFace,
+    parent_style: &ComputedStyle,
+) -> f32 {
+    let s = compute_style(node, sheet, parent_style, false);
     let ex = 2.0 * (s.margin + s.border_width + s.padding);
     let content = if let Some(w) = s.width {
         w
@@ -418,8 +443,8 @@ fn intrinsic_width(node: &Node, sheet: &Stylesheet, font: &dyn FontFace) -> f32 
         let kids: Vec<f32> = node
             .children
             .iter()
-            .filter(|c| compute_style(c, sheet).display != Display::None)
-            .map(|c| intrinsic_width(c, sheet, font))
+            .filter(|c| compute_style(c, sheet, &s, false).display != Display::None)
+            .map(|c| intrinsic_width(c, sheet, font, &s))
             .collect();
         if row {
             kids.iter().sum::<f32>() + s.gap * ((kids.len() as f32 - 1.0).max(0.0))

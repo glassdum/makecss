@@ -15,8 +15,9 @@
 use std::fs::File;
 use std::io::{BufWriter, Write};
 
+use makecss_core::font::BitmapFont;
 use makecss_core::truetype::TtfFont;
-use makecss_core::{render_html, render_html_with_font, Canvas};
+use makecss_core::{render_html_with_font_hover, Canvas, FontFace};
 
 const WIDTH: u32 = 540;
 const HEIGHT: u32 = 360;
@@ -53,52 +54,57 @@ fn html() -> &'static str {
     "#
 }
 
-/// 화면을 꾸미는 CSS. display / position / flex 속성들을 사용합니다.
+/// 화면을 꾸미는 CSS. display / position / flex + 상속 + :hover 를 사용합니다.
+/// (.p 는 color 지정이 없어 부모 .card 의 color를 상속받습니다.)
 fn css() -> &'static str {
     r#"
-        .page   { background: #eef2f7; padding: 16px; }
+        .page       { background: #eef2f7; padding: 16px; }
 
-        .nav    { display: flex; justify-content: space-between; align-items: center;
-                  background: #1a1a2e; padding: 12px; }
-        .brand  { color: white; font-size: 24px; }
-        .links  { display: flex; gap: 16px; }
-        .link   { color: #aab4d4; font-size: 16px; }
+        .nav        { display: flex; justify-content: space-between; align-items: center;
+                      background: #1a1a2e; padding: 12px; }
+        .brand      { color: white; font-size: 24px; }
+        .links      { display: flex; gap: 16px; }
+        .link       { color: #aab4d4; font-size: 16px; padding: 4px; }
+        .link:hover { color: white; background: #34345a; }
 
-        .cards  { display: flex; align-items: stretch; gap: 12px; margin: 14px; }
-        .card   { flex: 1; position: relative; background: white;
-                  border-width: 1px; border-color: #ccccdd; padding: 12px; }
-        .h      { font-size: 20px; color: #1a1a2e; }
-        .p      { font-size: 14px; color: #445566; }
-        .badge  { position: absolute; top: 8px; right: 8px;
-                  background: #e0457b; color: white; font-size: 12px; padding: 4px; }
+        .cards      { display: flex; align-items: stretch; gap: 12px; margin: 14px; }
+        .card       { flex: 1; position: relative; background: white; color: #445566;
+                      border-width: 1px; border-color: #ccccdd; padding: 12px; }
+        .card:hover { background: #fff0f6; border-color: #e0457b; }
+        .h          { font-size: 20px; color: #1a1a2e; }
+        .p          { font-size: 14px; }
+        .badge      { position: absolute; top: 8px; right: 8px;
+                      background: #e0457b; color: white; font-size: 12px; padding: 4px; }
     "#
 }
 
 fn main() {
     let (html, css) = (html(), css());
 
-    // 1) 기본 비트맵 폰트로 렌더 → snapshot.bmp
-    let canvas = render_html(html, css, WIDTH, HEIGHT);
-    write_bmp(&canvas, "snapshot.bmp").expect("BMP 저장 실패");
-    println!("저장: snapshot.bmp ({WIDTH}x{HEIGHT}) — 비트맵 폰트");
-
-    // 2) 폰트 경로가 주어지면 진짜 TTF로도 렌더 → snapshot_ttf.bmp
+    // 폰트 경로가 주어지면 진짜 TTF, 아니면 내장 비트맵 폰트.
     let font_path = std::env::args()
         .nth(1)
         .or_else(|| std::env::var("MAKECSS_FONT").ok());
-    if let Some(path) = font_path {
-        match std::fs::read(&path) {
-            Ok(bytes) => match TtfFont::from_bytes(bytes) {
-                Ok(font) => {
-                    let canvas = render_html_with_font(html, css, WIDTH, HEIGHT, &font);
-                    write_bmp(&canvas, "snapshot_ttf.bmp").expect("BMP 저장 실패");
-                    println!("저장: snapshot_ttf.bmp ({WIDTH}x{HEIGHT}) — TTF: {path}");
-                }
-                Err(e) => eprintln!("TTF 파싱 실패: {e}"),
-            },
-            Err(e) => eprintln!("폰트 파일 읽기 실패({path}): {e}"),
-        }
-    }
+    let ttf = font_path
+        .as_ref()
+        .and_then(|p| std::fs::read(p).ok())
+        .and_then(|b| TtfFont::from_bytes(b).ok());
+    let font: &dyn FontFace = match &ttf {
+        Some(f) => f,
+        None => &BitmapFont,
+    };
+    let label = if ttf.is_some() { "TTF" } else { "비트맵" };
+
+    // 1) 마우스 없음(hover 꺼짐) → snapshot.bmp
+    let canvas = render_html_with_font_hover(html, css, WIDTH, HEIGHT, font, None);
+    write_bmp(&canvas, "snapshot.bmp").expect("BMP 저장 실패");
+    println!("저장: snapshot.bmp ({WIDTH}x{HEIGHT}) — {label}, hover 꺼짐");
+
+    // 2) 마우스가 첫 카드 위(150, 200)에 있다고 가정 → snapshot_hover.bmp
+    //    .card:hover(분홍 배경)와 .link:hover 가 적용된 모습이 보입니다.
+    let hovered = render_html_with_font_hover(html, css, WIDTH, HEIGHT, font, Some((150.0, 200.0)));
+    write_bmp(&hovered, "snapshot_hover.bmp").expect("BMP 저장 실패");
+    println!("저장: snapshot_hover.bmp — 마우스가 첫 카드 위에 있을 때(:hover)");
 }
 
 /// Canvas(0x00RRGGBB 픽셀들)를 24비트 BMP 파일로 씁니다(압축 없는 단순 형식).

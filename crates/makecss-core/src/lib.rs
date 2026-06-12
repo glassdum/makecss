@@ -55,15 +55,27 @@ pub fn render_with_font(
     height: u32,
     font: &dyn FontFace,
 ) -> Canvas {
+    render_core(root, css, width, height, font, None)
+}
+
+/// 모든 render 함수가 거쳐가는 실제 구현. pointer가 있으면 :hover를 반영합니다.
+fn render_core(
+    root: &Node,
+    css: &str,
+    width: u32,
+    height: u32,
+    font: &dyn FontFace,
+    pointer: Option<(f32, f32)>,
+) -> Canvas {
     // 1. 파싱: CSS 텍스트 → 규칙 구조.
     let stylesheet = css::parse(css);
 
-    // 2 + 3. 스타일 계산과 레이아웃(글자 줄나눔 포함)을 화면 크기에 맞춰 수행.
+    // 2 + 3. 스타일 계산과 레이아웃(상속·글자 줄나눔 포함)을 화면 크기에 맞춰 수행.
     let layout_root = layout::layout_tree(root, &stylesheet, width as f32, height as f32, font);
 
-    // 4. 페인트: 흰 캔버스를 만들고 박스들을 그 위에 그립니다.
+    // 4. 페인트: 흰 캔버스를 만들고 박스들을 그 위에 그립니다(포인터로 hover 반영).
     let mut canvas = Canvas::new(width, height, Color::WHITE);
-    paint::paint(&mut canvas, &layout_root, font);
+    paint::paint(&mut canvas, &layout_root, font, pointer);
     canvas
 }
 
@@ -86,6 +98,20 @@ pub fn render_html_with_font(
 ) -> Canvas {
     let root = html::parse(html);
     render_with_font(&root, css, width, height, font)
+}
+
+/// 마우스 위치를 반영해 그립니다(:hover). 인터랙티브 앱(창)에서 매 프레임 호출합니다.
+/// pointer가 None이면 hover 없이 그립니다(마우스가 창 밖).
+pub fn render_html_with_font_hover(
+    html: &str,
+    css: &str,
+    width: u32,
+    height: u32,
+    font: &dyn FontFace,
+    pointer: Option<(f32, f32)>,
+) -> Canvas {
+    let root = html::parse(html);
+    render_core(&root, css, width, height, font, pointer)
 }
 
 #[cfg(test)]
@@ -114,5 +140,27 @@ mod tests {
         let canvas = render(&root, css, 60, 30);
         let has_black = canvas.pixels.contains(&0x000000);
         assert!(has_black, "글자 픽셀이 하나도 그려지지 않았습니다");
+    }
+
+    #[test]
+    fn child_text_inherits_parent_color() {
+        // 부모 .box에만 color 빨강 지정. 자식 글자도 빨강을 물려받아야 함.
+        let html = r#"<div class="box"><div class="t">I</div></div>"#;
+        let css = ".box { color: red; } .t { font-size: 14px; }";
+        let canvas = render_html(html, css, 60, 30);
+        assert!(canvas.pixels.contains(&0xff0000), "글자가 상속된 빨강이어야 함");
+        assert!(!canvas.pixels.contains(&0x000000), "검정 글자가 있으면 상속 실패");
+    }
+
+    #[test]
+    fn hover_changes_background_under_pointer() {
+        let html = r#"<div class="btn"></div>"#;
+        let css = ".btn { width: 40px; height: 40px; background: white; } \
+                   .btn:hover { background: red; }";
+        // 마우스가 박스 밖(95,5) → 흰색. 박스 안(5,5) → 빨강.
+        let out = render_html_with_font_hover(html, css, 100, 50, &font::BitmapFont, Some((95.0, 5.0)));
+        let on = render_html_with_font_hover(html, css, 100, 50, &font::BitmapFont, Some((5.0, 5.0)));
+        assert_eq!(out.pixels[5 * 100 + 5], 0xffffff);
+        assert_eq!(on.pixels[5 * 100 + 5], 0xff0000);
     }
 }

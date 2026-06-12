@@ -31,16 +31,31 @@ pub struct Rule {
     pub declarations: Vec<Declaration>,
 }
 
-/// 셀렉터 = "누구에게 적용할지".
-/// MVP에서는 세 종류만 지원합니다.
+/// 단순 셀렉터 = "어떤 요소인가"(상태는 빼고).
 #[derive(Debug, Clone, PartialEq)]
-pub enum Selector {
+pub enum SimpleSelector {
     /// `*` : 모든 요소.
     Universal,
     /// `div` : 그 태그 이름을 가진 요소.
     Type(String),
     /// `.card` : 그 클래스를 가진 요소.
     Class(String),
+}
+
+/// 셀렉터 = 단순 셀렉터 + (선택) 상태 가상클래스.
+/// 예: `.btn:hover` = 클래스 btn 이면서 마우스가 위에 있을 때.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Selector {
+    pub simple: SimpleSelector,
+    /// `:hover` 가 붙었는지. true면 마우스가 위에 있을 때만 적용.
+    pub hover: bool,
+}
+
+impl Selector {
+    /// 상태 없는 단순 셀렉터를 만듭니다(테스트/편의용).
+    pub fn simple(simple: SimpleSelector) -> Self {
+        Selector { simple, hover: false }
+    }
 }
 
 /// 선언 = "속성: 값" 한 쌍. 예: padding 라는 속성에 "10px" 라는 값.
@@ -198,28 +213,42 @@ impl Parser {
         selectors
     }
 
-    /// 셀렉터 하나(`*`, `div`, `.card`)를 파싱합니다.
+    /// 셀렉터 하나(`*`, `div`, `.card`, 그리고 선택적 `:hover`)를 파싱합니다.
     fn parse_one_selector(&mut self) -> Option<Selector> {
-        match self.peek()? {
+        let simple = match self.peek()? {
             '*' => {
                 self.next();
-                Some(Selector::Universal)
+                SimpleSelector::Universal
             }
             '.' => {
                 self.next(); // 점을 먹고 클래스 이름을 읽습니다.
                 let name = self.consume_while(is_name_char);
                 if name.is_empty() {
-                    None
-                } else {
-                    Some(Selector::Class(name))
+                    return None;
                 }
+                SimpleSelector::Class(name)
             }
             c if is_name_char(c) => {
                 let name = self.consume_while(is_name_char);
-                Some(Selector::Type(name))
+                SimpleSelector::Type(name)
             }
-            _ => None,
+            _ => return None,
+        };
+
+        // 선택적 가상클래스 `:hover`. 그 외 가상클래스는 (아직) 지원하지 않아
+        // 셀렉터를 무효화합니다(아무것도 매칭하지 않도록).
+        let mut hover = false;
+        if self.peek() == Some(':') {
+            self.next();
+            let pseudo = self.consume_while(is_name_char);
+            if pseudo == "hover" {
+                hover = true;
+            } else {
+                return None;
+            }
         }
+
+        Some(Selector { simple, hover })
     }
 
     /// `{ ... }` 안의 선언들을 파싱합니다.
@@ -294,11 +323,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn parses_hover_pseudo_class() {
+        let sheet = parse(".btn:hover { background: red; }");
+        let sel = &sheet.rules[0].selectors[0];
+        assert_eq!(sel.simple, SimpleSelector::Class("btn".into()));
+        assert!(sel.hover);
+    }
+
+    #[test]
     fn parses_a_simple_rule() {
         let sheet = parse(".card { background: blue; padding: 10px; }");
         assert_eq!(sheet.rules.len(), 1);
         let rule = &sheet.rules[0];
-        assert_eq!(rule.selectors, vec![Selector::Class("card".into())]);
+        assert_eq!(rule.selectors, vec![Selector::simple(SimpleSelector::Class("card".into()))]);
         assert_eq!(rule.declarations.len(), 2);
         assert_eq!(rule.declarations[0].property, "background");
         assert_eq!(rule.declarations[0].value, "blue");
@@ -311,7 +348,7 @@ mod tests {
         // @media 블록과 떠도는 '}' 뒤에 오는 정상 규칙도 끝까지 파싱되어야 합니다.
         let sheet = parse("@media screen { .x { color: red; } } } .a { color: blue; }");
         let last = sheet.rules.last().expect("정상 규칙이 살아있어야 함");
-        assert_eq!(last.selectors, vec![Selector::Class("a".into())]);
+        assert_eq!(last.selectors, vec![Selector::simple(SimpleSelector::Class("a".into()))]);
         assert_eq!(last.declarations[0].value, "blue");
     }
 
@@ -320,6 +357,6 @@ mod tests {
         let sheet = parse("h1, .title { color: red; }\n* { margin: 0; }");
         assert_eq!(sheet.rules.len(), 2);
         assert_eq!(sheet.rules[0].selectors.len(), 2);
-        assert_eq!(sheet.rules[1].selectors, vec![Selector::Universal]);
+        assert_eq!(sheet.rules[1].selectors, vec![Selector::simple(SimpleSelector::Universal)]);
     }
 }
