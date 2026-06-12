@@ -1,0 +1,13 @@
+# 이 파일은 "워크스페이스" 정의입니다.
+# 워크스페이스 = 여러 개의 crate(작은 프로젝트)를 하나로 묶어 함께 빌드/관리하는 단위.
+#
+# - makecss-core : CSS를 픽셀로 바꾸는 순수 엔진(라이브러리). 외부 세계를 모릅니다.
+# - makecss-demo : 그 엔진을 불러와 실제 OS 창에 띄워 보여주는 실행 프로그램.
+#
+# 나중에 Python/Java/C# 바인딩이 추가되면 makecss-demo 자리에 나란히 들어옵니다.
+[workspace]
+resolver = "2"
+members = [
+    "crates/makecss-core",
+    "crates/makecss-demo",
+]

@@ -1,0 +1,13 @@
+[package]
+name = "makecss-demo"
+version = "0.1.0"
+edition = "2021"
+description = "makecss-core를 실제 OS 창에 띄워 보여주는 쇼룸 프로그램."
+
+[dependencies]
+# 우리 엔진(주방). 같은 워크스페이스 안에 있으니 경로로 가져옵니다.
+makecss-core = { path = "../makecss-core" }
+
+# 외부 세계와 닿는 단 두 개의 라이브러리:
+winit = "0.30"      # OS 창 만들기 + 이벤트(닫기/다시그리기) 받기.
+softbuffer = "0.4"  # 우리 픽셀 배열을 창 표면에 그대로 붙이기.
